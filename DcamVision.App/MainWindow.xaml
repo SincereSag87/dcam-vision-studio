@@ -1,0 +1,176 @@
+<Window x:Class="DcamVision.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DCAM Vision Studio"
+        MinHeight="640"
+        MinWidth="1040"
+        Height="760"
+        Width="1200"
+        Background="#F5F7FA">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#16202A" Padding="20,14">
+            <DockPanel LastChildFill="True">
+                <TextBlock Text="DCAM Vision Studio"
+                           Foreground="White"
+                           FontSize="22"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Right"
+                           Text="{Binding ConnectionStatus}"
+                           Foreground="#B9C6D3"
+                           FontSize="14"
+                           VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="300" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Background="White"
+                    BorderBrush="#D7DEE7"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="14">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Top"
+                            Content="Discover"
+                            Command="{Binding DiscoverCommand}"
+                            Height="36"
+                            Margin="0,0,0,12" />
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="Cameras"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,8" />
+                    <ListBox ItemsSource="{Binding Devices}"
+                             SelectedItem="{Binding SelectedDevice}"
+                             BorderBrush="#D7DEE7"
+                             DisplayMemberPath="DisplayName" />
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="1"
+                    Margin="16,0"
+                    Background="#0E141B"
+                    BorderBrush="#263341"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                <Grid>
+                    <Image Source="{Binding PreviewImage}"
+                           Stretch="Uniform"
+                           SnapsToDevicePixels="True" />
+                    <TextBlock Text="{Binding PreviewPlaceholder}"
+                               Foreground="#AEB8C2"
+                               FontSize="18"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                    <Border HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Margin="14"
+                            Padding="10,6"
+                            Background="#CC16202A"
+                            CornerRadius="4">
+                        <TextBlock Text="{Binding LatestFrameSummary}"
+                                   Foreground="#E7EDF4"
+                                   FontSize="12" />
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Border Grid.Column="2"
+                    Background="White"
+                    BorderBrush="#D7DEE7"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="14">
+                <StackPanel>
+                    <TextBlock Text="Camera Settings"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,12" />
+
+                    <Button Content="{Binding ConnectButtonText}"
+                            Command="{Binding ToggleConnectionCommand}"
+                            Height="36"
+                            Margin="0,0,0,10" />
+                    <Button Content="Capture"
+                            Command="{Binding CaptureCommand}"
+                            Height="36"
+                            Margin="0,0,0,10" />
+
+                    <Grid Margin="0,2,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0"
+                                Content="Start Live"
+                                Command="{Binding StartLiveCommand}"
+                                Height="34"
+                                Margin="0,0,5,0" />
+                        <Button Grid.Column="1"
+                                Content="Stop Live"
+                                Command="{Binding StopLiveCommand}"
+                                Height="34"
+                                Margin="5,0,0,0" />
+                    </Grid>
+
+                    <TextBlock Text="Exposure (ms)"
+                               Margin="0,0,0,4" />
+                    <DockPanel Margin="0,0,0,16">
+                        <Button DockPanel.Dock="Right"
+                                Content="Apply"
+                                Command="{Binding ApplyExposureCommand}"
+                                Width="74"
+                                Height="32"
+                                Margin="8,0,0,0" />
+                        <TextBox Text="{Binding ExposureMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                 Height="32"
+                                 VerticalContentAlignment="Center" />
+                    </DockPanel>
+
+                    <Separator Margin="0,2,0,14" />
+
+                    <TextBlock Text="Properties"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,8" />
+                    <ItemsControl ItemsSource="{Binding Properties}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding DisplayName}"
+                                               Foreground="#4D5A66" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Value}"
+                                               FontWeight="SemiBold" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2"
+                Background="White"
+                BorderBrush="#D7DEE7"
+                BorderThickness="1,1,0,0"
+                Padding="16,10">
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="#3E4A56" />
+        </Border>
+    </Grid>
+</Window>
