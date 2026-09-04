@@ -129,14 +129,9 @@ public sealed class SimulatedCameraService : ICameraService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (exposure <= TimeSpan.Zero)
+        if (!CameraExposureRange.TryValidate(exposure, out var errorMessage))
         {
-            throw new ArgumentOutOfRangeException(nameof(exposure), "Exposure must be greater than zero.");
-        }
-
-        if (exposure > TimeSpan.FromSeconds(10))
-        {
-            throw new ArgumentOutOfRangeException(nameof(exposure), "Exposure must be 10 seconds or less.");
+            throw new ArgumentOutOfRangeException(nameof(exposure), errorMessage);
         }
 
         _settings = _settings with { Exposure = exposure };

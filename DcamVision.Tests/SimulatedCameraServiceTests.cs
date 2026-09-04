@@ -59,6 +59,7 @@ public sealed class SimulatedCameraServiceTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
+    [InlineData(0.05)]
     [InlineData(10_001)]
     public async Task SetExposureAsync_RejectsInvalidExposure(double milliseconds)
     {
@@ -77,6 +78,29 @@ public sealed class SimulatedCameraServiceTests
         await service.SetExposureAsync(exposure);
 
         Assert.Equal(exposure, service.CurrentSettings.Exposure);
+    }
+
+    [Theory]
+    [InlineData("", "required")]
+    [InlineData("abc", "number")]
+    [InlineData("0.05", "at least")]
+    [InlineData("10001", "or less")]
+    public void CameraExposureRange_RejectsInvalidText(string value, string expectedMessageFragment)
+    {
+        var isValid = CameraExposureRange.TryParseMilliseconds(value, out _, out var errorMessage);
+
+        Assert.False(isValid);
+        Assert.Contains(expectedMessageFragment, errorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CameraExposureRange_ParsesValidExposureText()
+    {
+        var isValid = CameraExposureRange.TryParseMilliseconds("25.5", out var exposure, out var errorMessage);
+
+        Assert.True(isValid);
+        Assert.Equal(TimeSpan.FromMilliseconds(25.5), exposure);
+        Assert.Equal(string.Empty, errorMessage);
     }
 
     [Fact]

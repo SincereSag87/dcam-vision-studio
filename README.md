@@ -4,9 +4,14 @@ DCAM Vision Studio is a modern scientific-camera control application built with 
 
 The original project used Hamamatsu DCAM SDK sample code as a starting point. This repository is being rebuilt from scratch with a production-style .NET architecture. Vendor SDK code is not copied into this repository; the old SDK material is only future reference for the native camera integration layer.
 
-## Phase 1 Status
+## Status
 
-Phase 1 implements the camera abstraction, a deterministic simulated camera, basic imaging helpers, unit tests, and a minimal WPF shell wired to the simulator. The simulator allows development and testing without physical camera hardware.
+- Phase 1 - Complete
+- Phase 2 - Complete
+
+Phase 1 implemented the camera abstraction, a deterministic simulated camera, basic imaging helpers, unit tests, and a minimal WPF shell wired to the simulator. The simulator allows development and testing without physical camera hardware.
+
+Phase 2 redesigned the WPF application into a polished scientific-camera dashboard. It adds a modern live image workspace, camera/device panel, camera settings summary, frame statistics, histogram visualization, auto contrast for preview display, improved status feedback, and simulator-backed operation.
 
 Hamamatsu DCAM integration is not complete yet. `DcamVision.Dcam` exists as the dedicated future adapter layer and intentionally contains only a placeholder implementation.
 
@@ -31,7 +36,7 @@ dotnet build
 dotnet run --project .\DcamVision.App\DcamVision.App.csproj
 ```
 
-The Phase 1 workflow is:
+The simulator-backed workflow is:
 
 1. Discover
 2. Select the simulated camera
@@ -50,7 +55,8 @@ dotnet test
 
 ## Roadmap
 
-- TODO Phase 2 - Modern camera dashboard
+- DONE Phase 1 - Camera abstraction and simulated camera
+- DONE Phase 2 - Modern camera dashboard
 - TODO Phase 3 - Exposure controls and presets
 - TODO Phase 4 - Live acquisition pipeline
 - TODO Phase 5 - LUT and histogram image processing
