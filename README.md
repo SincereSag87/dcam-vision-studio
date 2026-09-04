@@ -9,12 +9,15 @@ The original project used Hamamatsu DCAM SDK sample code as a starting point. Th
 - Phase 1 - Complete
 - Phase 2 - Complete
 - Phase 3 - Complete
+- Phase 4 - Complete
 
 Phase 1 implemented the camera abstraction, a deterministic simulated camera, basic imaging helpers, unit tests, and a minimal WPF shell wired to the simulator. The simulator allows development and testing without physical camera hardware.
 
 Phase 2 redesigned the WPF application into a polished scientific-camera dashboard. It adds a modern live image workspace, camera/device panel, camera settings summary, frame statistics, histogram visualization, auto contrast for preview display, improved status feedback, and simulator-backed operation.
 
 Phase 3 adds a complete exposure control workspace for scientific imaging. It includes validated exposure presets, unit conversion across microseconds, milliseconds, and seconds, camera-reported exposure ranges, logarithmic slider adjustment, exposure sweep automation, cancellation, result browsing, exposure-response visualization, and saturation analysis.
+
+Phase 4 replaces the basic live loop with a robust producer/consumer live acquisition pipeline. It uses a bounded frame buffer, configurable overflow behavior, rolling acquisition/display FPS metrics, dropped-frame and source-gap tracking, preview throttling, latest-frame display semantics, pause/resume preview behavior, clean shutdown, and high-rate simulator testing. Pause Preview keeps acquisition running while presentation is paused; Resume Preview displays the newest available processed frame.
 
 Hamamatsu DCAM integration is not complete yet. `DcamVision.Dcam` exists as the dedicated future adapter layer and intentionally contains only a placeholder implementation.
 
@@ -61,8 +64,8 @@ dotnet test
 - DONE Phase 1 - Camera abstraction and simulated camera
 - DONE Phase 2 - Modern camera dashboard
 - DONE Phase 3 - Exposure controls and presets
-- TODO Phase 4 - Live acquisition pipeline
-- TODO Phase 5 - LUT and histogram image processing
+- DONE Phase 4 - Live acquisition pipeline
+- TODO Phase 5 - LUT and Advanced Histogram Processing
 - TODO Phase 6 - Dynamic camera property explorer
 - TODO Phase 7 - Capture history
 - TODO Phase 8 - Image and metadata export

@@ -20,6 +20,13 @@ public partial class App : Application
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information));
         services.AddSingleton<ICameraService, SimulatedCameraService>();
         services.AddSingleton<ImagePreviewService>();
+        services.AddSingleton(new LiveAcquisitionOptions
+        {
+            BufferCapacity = 4,
+            OverflowStrategy = LiveBufferOverflowStrategy.DropOldest,
+            MaximumPreviewFps = 30
+        });
+        services.AddSingleton<LiveAcquisitionService>();
         services.AddSingleton<ExposureSweepRunner>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();

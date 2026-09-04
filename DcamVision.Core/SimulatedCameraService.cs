@@ -13,8 +13,24 @@ public sealed class SimulatedCameraService : ICameraService
         IsSimulated: true);
 
     private readonly object _syncRoot = new();
+    private readonly SimulatedCameraOptions _options;
     private CaptureSettings _settings = new();
     private long _frameNumber;
+
+    public SimulatedCameraService()
+        : this(new SimulatedCameraOptions())
+    {
+    }
+
+    public SimulatedCameraService(SimulatedCameraOptions options)
+    {
+        if (options.FramesPerSecond <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "Simulated frame rate must be greater than zero.");
+        }
+
+        _options = options;
+    }
 
     public CameraConnectionState State { get; private set; } = CameraConnectionState.Disconnected;
 
@@ -107,7 +123,7 @@ public sealed class SimulatedCameraService : ICameraService
         EnsureConnected();
         SetState(CameraConnectionState.Streaming);
 
-        var interval = TimeSpan.FromMilliseconds(66);
+        var interval = TimeSpan.FromSeconds(1.0 / _options.FramesPerSecond);
 
         try
         {

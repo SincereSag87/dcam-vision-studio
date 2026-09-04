@@ -13,6 +13,7 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly ICameraService _cameraService;
     private readonly ImagePreviewService _imagePreviewService;
+    private readonly LiveAcquisitionService _liveAcquisitionService;
     private readonly ExposureSweepRunner _sweepRunner;
     private readonly ILogger<MainViewModel> _logger;
     private readonly ExposureSliderMapper _sliderMapper;
@@ -28,7 +29,7 @@ public sealed class MainViewModel : ObservableObject
     private FrameStatistics? _statistics;
     private CameraFrame? _lastFrame;
     private int[] _histogramBins = [];
-    private CancellationTokenSource? _operationCancellation;
+    private CancellationTokenSource? _sweepCancellation;
     private ApplicationOperation _operation = ApplicationOperation.Idle;
     private bool _isAutoContrastEnabled;
     private string _sweepStartValue = "1.000";
@@ -47,18 +48,22 @@ public sealed class MainViewModel : ObservableObject
     private int _sweepTotalFrames;
     private TimeSpan _sweepCurrentExposure;
     private SweepResultFrameViewModel? _selectedSweepResult;
+    private LiveAcquisitionMetrics _liveMetrics;
 
     public MainViewModel(
         ICameraService cameraService,
         ImagePreviewService imagePreviewService,
+        LiveAcquisitionService liveAcquisitionService,
         ExposureSweepRunner sweepRunner,
         ILogger<MainViewModel> logger)
     {
         _cameraService = cameraService;
         _imagePreviewService = imagePreviewService;
+        _liveAcquisitionService = liveAcquisitionService;
         _sweepRunner = sweepRunner;
         _logger = logger;
         _sliderMapper = new ExposureSliderMapper(_cameraService.ExposureRange);
+        _liveMetrics = _liveAcquisitionService.Metrics;
         _pendingExposure = _cameraService.CurrentSettings.Exposure;
         _exposureValue = FormatExposureValue(_pendingExposure, _selectedExposureUnit);
         _exposureSliderValue = _sliderMapper.ToSliderValue(_pendingExposure);
@@ -68,17 +73,24 @@ public sealed class MainViewModel : ObservableObject
             ExposurePresets.Add(new ExposurePresetViewModel(preset, _cameraService.ExposureRange));
         }
 
-        DiscoverCommand = new AsyncRelayCommand(DiscoverAsync, () => CanRunNormalOperation && !IsLive);
-        ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => CanRunNormalOperation && (SelectedDevice is not null || IsConnected));
+        DiscoverCommand = new AsyncRelayCommand(DiscoverAsync, () => CanRunNormalOperation);
+        ToggleConnectionCommand = new AsyncRelayCommand(ToggleConnectionAsync, () => CanToggleConnection);
         CaptureCommand = new AsyncRelayCommand(CaptureAsync, () => CanRunNormalOperation && IsConnected);
         StartLiveCommand = new AsyncRelayCommand(StartLiveAsync, () => CanRunNormalOperation && IsConnected);
-        StopLiveCommand = new RelayCommand(StopLive, () => IsLive);
+        PausePreviewCommand = new RelayCommand(PausePreview, () => IsLiveRunning);
+        ResumePreviewCommand = new RelayCommand(ResumePreview, () => IsPreviewPaused);
+        StopLiveCommand = new AsyncRelayCommand(StopLiveAsync, () => IsLive);
         ApplyExposureCommand = new AsyncRelayCommand(ApplyExposureFromEditorAsync, () => CanRunNormalOperation);
         ApplyPresetCommand = new AsyncParameterRelayCommand(ApplyPresetAsync, parameter => CanRunNormalOperation && parameter is ExposurePresetViewModel { IsSupported: true });
         RunSweepCommand = new AsyncRelayCommand(RunSweepAsync, () => CanRunNormalOperation && IsConnected);
         CancelSweepCommand = new RelayCommand(CancelSweep, () => IsSweepRunning);
         PreviousSweepResultCommand = new RelayCommand(SelectPreviousSweepResult, () => SelectedSweepResult?.Index > 0);
         NextSweepResultCommand = new RelayCommand(SelectNextSweepResult, () => SelectedSweepResult is not null && SelectedSweepResult.Index < SweepResults.Count - 1);
+
+        _liveAcquisitionService.FrameReady += OnLiveFrameReady;
+        _liveAcquisitionService.MetricsUpdated += OnLiveMetricsUpdated;
+        _liveAcquisitionService.StateChanged += OnLiveStateChanged;
+        _liveAcquisitionService.Faulted += OnLiveFaulted;
 
         RefreshPresetStates();
     }
@@ -210,7 +222,11 @@ public sealed class MainViewModel : ObservableObject
 
     public bool IsSweepRunning => Operation is ApplicationOperation.Sweep;
 
-    public bool IsLive => Operation is ApplicationOperation.Live;
+    public bool IsLive => _liveAcquisitionService.State is LiveAcquisitionState.Running or LiveAcquisitionState.PreviewPaused or LiveAcquisitionState.Starting or LiveAcquisitionState.Stopping;
+
+    public bool IsLiveRunning => _liveAcquisitionService.State is LiveAcquisitionState.Running;
+
+    public bool IsPreviewPaused => _liveAcquisitionService.State is LiveAcquisitionState.PreviewPaused;
 
     public Visibility BusyVisibility => Operation is ApplicationOperation.Busy or ApplicationOperation.Sweep ? Visibility.Visible : Visibility.Collapsed;
 
@@ -226,7 +242,21 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    public string HeaderStatusText => Operation is ApplicationOperation.Sweep ? "Exposure Sweep" : CameraStatusFormatter.FormatHeaderStatus(_cameraService.State);
+    public string HeaderStatusText => Operation is ApplicationOperation.Sweep
+        ? "Exposure Sweep"
+        : IsLive
+            ? LiveStateText
+            : CameraStatusFormatter.FormatHeaderStatus(_cameraService.State);
+
+    public string LiveStateText => _liveAcquisitionService.State switch
+    {
+        LiveAcquisitionState.PreviewPaused => "LIVE - PREVIEW PAUSED",
+        LiveAcquisitionState.Running => "LIVE",
+        LiveAcquisitionState.Starting => "STARTING",
+        LiveAcquisitionState.Stopping => "STOPPING",
+        LiveAcquisitionState.Faulted => "FAULTED",
+        _ => "STOPPED"
+    };
 
     public string HeaderDeviceText => CameraStatusFormatter.FormatDeviceName(_cameraService.ConnectedDevice);
 
@@ -289,6 +319,26 @@ public sealed class MainViewModel : ObservableObject
         get => _histogramBins;
         private set => SetProperty(ref _histogramBins, value);
     }
+
+    public string AcquisitionFpsText => _liveMetrics.AcquisitionFps.ToString("0.0", CultureInfo.InvariantCulture);
+
+    public string DisplayFpsText => _liveMetrics.DisplayFps.ToString("0.0", CultureInfo.InvariantCulture);
+
+    public string FramesAcquiredText => _liveMetrics.FramesAcquired.ToString("N0", CultureInfo.InvariantCulture);
+
+    public string FramesProcessedText => _liveMetrics.FramesProcessed.ToString("N0", CultureInfo.InvariantCulture);
+
+    public string FramesDisplayedText => _liveMetrics.FramesDisplayed.ToString("N0", CultureInfo.InvariantCulture);
+
+    public string PipelineDropsText => _liveMetrics.PipelineDrops.ToString("N0", CultureInfo.InvariantCulture);
+
+    public string SourceFrameGapsText => _liveMetrics.SourceFrameGaps.ToString("N0", CultureInfo.InvariantCulture);
+
+    public string TotalDroppedText => _liveMetrics.TotalDropped.ToString("N0", CultureInfo.InvariantCulture);
+
+    public string BufferOccupancyText => $"{_liveMetrics.BufferOccupancy} / {_liveMetrics.BufferCapacity}";
+
+    public string SessionElapsedText => _liveMetrics.Elapsed.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture);
 
     public string SweepStartValue
     {
@@ -458,7 +508,11 @@ public sealed class MainViewModel : ObservableObject
 
     public AsyncRelayCommand StartLiveCommand { get; }
 
-    public RelayCommand StopLiveCommand { get; }
+    public RelayCommand PausePreviewCommand { get; }
+
+    public RelayCommand ResumePreviewCommand { get; }
+
+    public AsyncRelayCommand StopLiveCommand { get; }
 
     public AsyncRelayCommand ApplyExposureCommand { get; }
 
@@ -472,7 +526,9 @@ public sealed class MainViewModel : ObservableObject
 
     public RelayCommand NextSweepResultCommand { get; }
 
-    private bool CanRunNormalOperation => Operation is ApplicationOperation.Idle;
+    private bool CanRunNormalOperation => Operation is ApplicationOperation.Idle && !IsLive;
+
+    private bool CanToggleConnection => Operation is ApplicationOperation.Idle && (IsConnected || SelectedDevice is not null);
 
     private async Task ApplyExposureFromEditorAsync()
     {
@@ -515,6 +571,11 @@ public sealed class MainViewModel : ObservableObject
         {
             if (IsConnected)
             {
+                if (IsLive)
+                {
+                    await _liveAcquisitionService.StopAsync();
+                }
+
                 await _cameraService.DisconnectAsync();
                 PropertySummaries.Clear();
                 StatusMessage = "Camera disconnected.";
@@ -546,66 +607,36 @@ public sealed class MainViewModel : ObservableObject
         });
     }
 
-    private Task StartLiveAsync()
+    private async Task StartLiveAsync()
     {
-        if (!IsConnected || Operation is not ApplicationOperation.Idle)
-        {
-            return Task.CompletedTask;
-        }
-
-        _operationCancellation = new CancellationTokenSource();
-        Operation = ApplicationOperation.Live;
-        StatusMessage = "Live acquisition started.";
-        _ = StreamLiveFramesAsync(_operationCancellation, _operationCancellation.Token);
-        return Task.CompletedTask;
-    }
-
-    private void StopLive()
-    {
-        if (!IsLive || _operationCancellation is null)
+        if (!IsConnected || !CanRunNormalOperation)
         {
             return;
         }
 
-        _operationCancellation.Cancel();
-        StatusMessage = "Live acquisition stopped.";
+        await _liveAcquisitionService.StartAsync();
+        StatusMessage = "Live acquisition started.";
+    }
+
+    private void PausePreview()
+    {
+        _liveAcquisitionService.PausePreview();
+        StatusMessage = "Live preview paused. Acquisition continues.";
         RefreshOperationState();
     }
 
-    private async Task StreamLiveFramesAsync(CancellationTokenSource source, CancellationToken cancellationToken)
+    private void ResumePreview()
     {
-        try
-        {
-            await foreach (var frame in _cameraService.StreamFramesAsync(cancellationToken))
-            {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    PresentFrame(frame);
-                    StatusMessage = $"Live frame #{FrameNumberText}.";
-                    RefreshOperationState();
-                });
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "Live acquisition failed.");
-            await Application.Current.Dispatcher.InvokeAsync(() => StatusMessage = exception.Message);
-        }
-        finally
-        {
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                if (ReferenceEquals(_operationCancellation, source))
-                {
-                    _operationCancellation.Dispose();
-                    _operationCancellation = null;
-                    Operation = ApplicationOperation.Idle;
-                }
-            });
-        }
+        _liveAcquisitionService.ResumePreview();
+        StatusMessage = "Live preview resumed.";
+        RefreshOperationState();
+    }
+
+    private async Task StopLiveAsync()
+    {
+        await _liveAcquisitionService.StopAsync();
+        StatusMessage = "Live acquisition stopped.";
+        RefreshOperationState();
     }
 
     private async Task ApplyPresetAsync(object? parameter)
@@ -645,7 +676,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        _operationCancellation = new CancellationTokenSource();
+        _sweepCancellation = new CancellationTokenSource();
         Operation = ApplicationOperation.Sweep;
         ClearSweepProgress();
         SweepResults.Clear();
@@ -657,7 +688,7 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            var result = await _sweepRunner.RunAsync(settings, progress, _operationCancellation.Token);
+            var result = await _sweepRunner.RunAsync(settings, progress, _sweepCancellation.Token);
             SweepResults.Clear();
             for (var i = 0; i < result.Frames.Count; i++)
             {
@@ -680,8 +711,8 @@ public sealed class MainViewModel : ObservableObject
         }
         finally
         {
-            _operationCancellation?.Dispose();
-            _operationCancellation = null;
+            _sweepCancellation?.Dispose();
+            _sweepCancellation = null;
             Operation = ApplicationOperation.Idle;
             SyncPendingExposure(_cameraService.CurrentSettings.Exposure);
             await RefreshPropertiesAsync();
@@ -691,12 +722,12 @@ public sealed class MainViewModel : ObservableObject
 
     private void CancelSweep()
     {
-        if (!IsSweepRunning || _operationCancellation is null)
+        if (!IsSweepRunning || _sweepCancellation is null)
         {
             return;
         }
 
-        _operationCancellation.Cancel();
+        _sweepCancellation.Cancel();
         StatusMessage = "Cancelling exposure sweep...";
     }
 
@@ -846,6 +877,15 @@ public sealed class MainViewModel : ObservableObject
         RefreshFrameReadouts();
     }
 
+    private void PresentFrame(ProcessedFrame processedFrame)
+    {
+        _lastFrame = processedFrame.Frame;
+        _statistics = processedFrame.Statistics;
+        HistogramBins = processedFrame.Histogram;
+        RefreshPreviewImage();
+        RefreshFrameReadouts();
+    }
+
     private void RefreshPreviewImage()
     {
         PreviewImage = _lastFrame is null
@@ -954,7 +994,10 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsSweepRunning));
         OnPropertyChanged(nameof(IsLive));
+        OnPropertyChanged(nameof(IsLiveRunning));
+        OnPropertyChanged(nameof(IsPreviewPaused));
         OnPropertyChanged(nameof(BusyVisibility));
+        OnPropertyChanged(nameof(LiveStateText));
         OnPropertyChanged(nameof(HeaderStatusText));
         OnPropertyChanged(nameof(HeaderDeviceText));
         OnPropertyChanged(nameof(HeaderSimulatorText));
@@ -965,6 +1008,53 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedConnectionState));
         OnPropertyChanged(nameof(SweepProgressText));
         RaiseCommandStates();
+    }
+
+    private void OnLiveFrameReady(object? sender, ProcessedFrame frame)
+    {
+        _ = Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            PresentFrame(frame);
+            StatusMessage = IsPreviewPaused ? "Live preview paused. Acquisition continues." : $"Live frame #{FrameNumberText}.";
+            RefreshOperationState();
+        });
+    }
+
+    private void OnLiveMetricsUpdated(object? sender, LiveAcquisitionMetrics metrics)
+    {
+        _ = Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            _liveMetrics = metrics;
+            RefreshLiveMetrics();
+        });
+    }
+
+    private void OnLiveStateChanged(object? sender, LiveAcquisitionState state)
+    {
+        _ = Application.Current.Dispatcher.InvokeAsync(RefreshOperationState);
+    }
+
+    private void OnLiveFaulted(object? sender, Exception exception)
+    {
+        _ = Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            StatusMessage = $"Live acquisition failed: {exception.Message}";
+            RefreshOperationState();
+        });
+    }
+
+    private void RefreshLiveMetrics()
+    {
+        OnPropertyChanged(nameof(AcquisitionFpsText));
+        OnPropertyChanged(nameof(DisplayFpsText));
+        OnPropertyChanged(nameof(FramesAcquiredText));
+        OnPropertyChanged(nameof(FramesProcessedText));
+        OnPropertyChanged(nameof(FramesDisplayedText));
+        OnPropertyChanged(nameof(PipelineDropsText));
+        OnPropertyChanged(nameof(SourceFrameGapsText));
+        OnPropertyChanged(nameof(TotalDroppedText));
+        OnPropertyChanged(nameof(BufferOccupancyText));
+        OnPropertyChanged(nameof(SessionElapsedText));
     }
 
     private void RefreshDeviceDetails()
@@ -1015,6 +1105,8 @@ public sealed class MainViewModel : ObservableObject
         ToggleConnectionCommand.RaiseCanExecuteChanged();
         CaptureCommand.RaiseCanExecuteChanged();
         StartLiveCommand.RaiseCanExecuteChanged();
+        PausePreviewCommand.RaiseCanExecuteChanged();
+        ResumePreviewCommand.RaiseCanExecuteChanged();
         StopLiveCommand.RaiseCanExecuteChanged();
         ApplyExposureCommand.RaiseCanExecuteChanged();
         ApplyPresetCommand.RaiseCanExecuteChanged();

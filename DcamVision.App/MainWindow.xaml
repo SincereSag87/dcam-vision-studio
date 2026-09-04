@@ -279,8 +279,13 @@
 
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <StackPanel>
-                                <TextBlock Text="Acquisition"
+                                <TextBlock Text="Live Acquisition"
                                            Style="{StaticResource SectionHeadingText}"
+                                           Margin="0,0,0,10" />
+                                <TextBlock Text="{Binding LiveStateText}"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
                                            Margin="0,0,0,10" />
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -301,12 +306,64 @@
                                             TabIndex="4"
                                             Margin="6,0,0,0" />
                                 </Grid>
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Content="Pause Preview"
+                                            Command="{Binding PausePreviewCommand}"
+                                            ToolTip="Pause preview display while acquisition continues"
+                                            TabIndex="5"
+                                            Margin="0,0,6,0" />
+                                    <Button Grid.Column="1"
+                                            Content="Resume Preview"
+                                            Command="{Binding ResumePreviewCommand}"
+                                            ToolTip="Resume preview display using the newest processed frame"
+                                            TabIndex="6"
+                                            Margin="6,0,0,0" />
+                                </Grid>
                                 <Button Content="Stop Live"
                                         Command="{Binding StopLiveCommand}"
                                         Style="{StaticResource DangerButton}"
                                         ToolTip="Stop continuous acquisition"
-                                        TabIndex="5"
+                                        TabIndex="7"
                                         Margin="0,10,0,0" />
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="Acquisition FPS" Style="{StaticResource LabelText}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AcquisitionFpsText}" Style="{StaticResource ValueText}" />
+                                    <TextBlock Grid.Row="1" Text="Display FPS" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DisplayFpsText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="2" Text="Acquired" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding FramesAcquiredText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="3" Text="Processed" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding FramesProcessedText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="4" Text="Displayed" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding FramesDisplayedText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="5" Text="Pipeline Drops" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding PipelineDropsText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="6" Text="Source Gaps" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SourceFrameGapsText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="7" Text="Buffer" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding BufferOccupancyText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="8" Text="Session" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SessionElapsedText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                </Grid>
                             </StackPanel>
                         </Border>
 
@@ -517,7 +574,7 @@
                                            Margin="0,0,0,8" />
                                 <ProgressBar Minimum="0"
                                              Maximum="100"
-                                             Value="{Binding SweepProgressValue}"
+                                             Value="{Binding SweepProgressValue, Mode=OneWay}"
                                              Height="8"
                                              Margin="0,0,0,8" />
                                 <TextBlock Text="{Binding SweepProgressText}" Style="{StaticResource MutedText}" />
