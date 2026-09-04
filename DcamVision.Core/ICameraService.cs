@@ -8,6 +8,8 @@ public interface ICameraService
 
     CaptureSettings CurrentSettings { get; }
 
+    CameraExposureRange ExposureRange { get; }
+
     Task<IReadOnlyList<CameraDevice>> DiscoverAsync(CancellationToken cancellationToken = default);
 
     Task ConnectAsync(string cameraId, CancellationToken cancellationToken = default);

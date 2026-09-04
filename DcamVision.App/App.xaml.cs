@@ -2,6 +2,7 @@ using System.Windows;
 using DcamVision.App.ViewModels;
 using DcamVision.Core;
 using DcamVision.App.Services;
+using DcamVision.Imaging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +20,7 @@ public partial class App : Application
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information));
         services.AddSingleton<ICameraService, SimulatedCameraService>();
         services.AddSingleton<ImagePreviewService>();
+        services.AddSingleton<ExposureSweepRunner>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
 

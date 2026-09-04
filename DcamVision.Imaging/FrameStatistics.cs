@@ -6,4 +6,6 @@ public sealed record FrameStatistics(
     double Mean,
     int Width,
     int Height,
-    long FrameNumber);
+    long FrameNumber,
+    int SaturatedPixelCount,
+    double SaturationPercentage);

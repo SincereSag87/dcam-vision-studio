@@ -87,7 +87,7 @@ public sealed class SimulatedCameraServiceTests
     [InlineData("10001", "or less")]
     public void CameraExposureRange_RejectsInvalidText(string value, string expectedMessageFragment)
     {
-        var isValid = CameraExposureRange.TryParseMilliseconds(value, out _, out var errorMessage);
+        var isValid = CameraExposureRange.Default.TryParse(value, ExposureUnit.Milliseconds, out _, out var errorMessage);
 
         Assert.False(isValid);
         Assert.Contains(expectedMessageFragment, errorMessage, StringComparison.OrdinalIgnoreCase);
@@ -96,7 +96,7 @@ public sealed class SimulatedCameraServiceTests
     [Fact]
     public void CameraExposureRange_ParsesValidExposureText()
     {
-        var isValid = CameraExposureRange.TryParseMilliseconds("25.5", out var exposure, out var errorMessage);
+        var isValid = CameraExposureRange.Default.TryParse("25.5", ExposureUnit.Milliseconds, out var exposure, out var errorMessage);
 
         Assert.True(isValid);
         Assert.Equal(TimeSpan.FromMilliseconds(25.5), exposure);

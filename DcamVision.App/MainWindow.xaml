@@ -315,28 +315,59 @@
                                 <TextBlock Text="Exposure Time"
                                            Style="{StaticResource SectionHeadingText}"
                                            Margin="0,0,0,10" />
-                                <DockPanel>
-                                    <TextBlock DockPanel.Dock="Right"
-                                               Text="ms"
-                                               Style="{StaticResource LabelText}"
-                                               VerticalAlignment="Center"
-                                               Margin="8,0,0,0" />
-                                    <TextBox Text="{Binding ExposureMilliseconds, UpdateSourceTrigger=PropertyChanged}"
-                                             ToolTip="Valid range is 0.1 ms to 10000 ms"
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="96" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding ExposureValue, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Enter an exposure in the selected unit"
                                              TabIndex="6">
                                         <TextBox.InputBindings>
                                             <KeyBinding Key="Enter" Command="{Binding ApplyExposureCommand}" />
                                         </TextBox.InputBindings>
                                     </TextBox>
-                                </DockPanel>
+                                    <ComboBox Grid.Column="1"
+                                              ItemsSource="{Binding ExposureUnits}"
+                                              SelectedItem="{Binding SelectedExposureUnit}"
+                                              Margin="8,0,0,0"
+                                              TabIndex="7">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Converter={StaticResource ExposureUnitLabelConverter}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                                <Slider Minimum="0"
+                                        Maximum="100"
+                                        Value="{Binding ExposureSliderValue, UpdateSourceTrigger=PropertyChanged}"
+                                        TickFrequency="20"
+                                        IsSnapToTickEnabled="False"
+                                        ToolTip="Logarithmic exposure adjustment"
+                                        Margin="0,12,0,0"
+                                        TabIndex="8" />
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="100 µs" Style="{StaticResource MutedText}" />
+                                    <TextBlock Grid.Column="1" Text="100 ms" Style="{StaticResource MutedText}" HorizontalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="10 s" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                                </Grid>
                                 <TextBlock Text="Current:"
                                            Style="{StaticResource LabelText}"
                                            Margin="0,10,0,0" />
                                 <TextBlock Text="{Binding CurrentExposureText}"
                                            Style="{StaticResource ValueText}" />
-                                <TextBlock Text="Range: 0.1 ms to 10000 ms"
+                                <TextBlock Text="{Binding SupportedExposureRangeText, StringFormat=Supported range: {0}}"
                                            Style="{StaticResource MutedText}"
                                            Margin="0,6,0,0" />
+                                <TextBlock Text="{Binding PendingExposureText, StringFormat=Pending: {0}}"
+                                           Style="{StaticResource MutedText}"
+                                           Margin="0,4,0,0" />
                                 <TextBlock Text="{Binding ExposureValidationMessage}"
                                            Foreground="{StaticResource WarningBrush}"
                                            FontSize="12"
@@ -348,12 +379,43 @@
                                         Style="{StaticResource PrimaryButton}"
                                         IsDefault="True"
                                         ToolTip="Apply the exposure value to the camera service"
-                                        TabIndex="8"
+                                        TabIndex="9"
                                         Margin="0,12,0,0" />
+                                <TextBlock Text="Presets"
+                                           Style="{StaticResource LabelText}"
+                                           Margin="0,14,0,8" />
+                                <ItemsControl ItemsSource="{Binding ExposurePresets}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <UniformGrid Columns="2" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{Binding DisplayName}"
+                                                    Command="{Binding DataContext.ApplyPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    IsEnabled="{Binding IsSupported}"
+                                                    ToolTip="Apply exposure preset"
+                                                    Margin="0,0,8,8">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
+                                                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource CardBorder}">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="Property Summary"
                                            Style="{StaticResource SectionHeadingText}"
@@ -378,6 +440,181 @@
                                            Visibility="{Binding IsDisconnected, Converter={StaticResource BooleanToVisibilityConverter}}" />
                             </StackPanel>
                         </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Exposure Sweep"
+                                           Style="{StaticResource SectionHeadingText}"
+                                           Margin="0,0,0,10" />
+                                <TextBlock Text="Start" Style="{StaticResource LabelText}" />
+                                <Grid Margin="0,4,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="96" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding SweepStartValue, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding ExposureUnits}" SelectedItem="{Binding SweepStartUnit}" Margin="8,0,0,0">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Converter={StaticResource ExposureUnitLabelConverter}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                                <TextBlock Text="End" Style="{StaticResource LabelText}" />
+                                <Grid Margin="0,4,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="96" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding SweepEndValue, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding ExposureUnits}" SelectedItem="{Binding SweepEndUnit}" Margin="8,0,0,0">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Converter={StaticResource ExposureUnitLabelConverter}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                                <TextBlock Text="Step" Style="{StaticResource LabelText}" />
+                                <Grid Margin="0,4,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="96" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding SweepStepValue, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding ExposureUnits}" SelectedItem="{Binding SweepStepUnit}" Margin="8,0,0,0">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Converter={StaticResource ExposureUnitLabelConverter}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,6,0">
+                                        <TextBlock Text="Frames / Exposure" Style="{StaticResource LabelText}" />
+                                        <TextBox Text="{Binding FramesPerExposure, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                        <TextBlock Text="Delay (ms)" Style="{StaticResource LabelText}" />
+                                        <TextBox Text="{Binding DelayBetweenCapturesMilliseconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="{Binding SweepPreviewText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2,0,8" />
+                                <TextBlock Text="{Binding SweepValidationMessage}"
+                                           Foreground="{StaticResource WarningBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Visibility="{Binding HasSweepValidationMessage, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                           Margin="0,0,0,8" />
+                                <ProgressBar Minimum="0"
+                                             Maximum="100"
+                                             Value="{Binding SweepProgressValue}"
+                                             Height="8"
+                                             Margin="0,0,0,8" />
+                                <TextBlock Text="{Binding SweepProgressText}" Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding SweepCurrentExposureText, StringFormat=Current Exposure: {0}}" Style="{StaticResource MutedText}" Margin="0,4,0,10" />
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0"
+                                            Content="Run Sweep"
+                                            Command="{Binding RunSweepCommand}"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Margin="0,0,6,0" />
+                                    <Button Grid.Column="1"
+                                            Content="Cancel"
+                                            Command="{Binding CancelSweepCommand}"
+                                            Style="{StaticResource DangerButton}"
+                                            Margin="6,0,0,0" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}">
+                            <StackPanel>
+                                <TextBlock Text="Sweep Results"
+                                           Style="{StaticResource SectionHeadingText}"
+                                           Margin="0,0,0,10" />
+                                <ListBox ItemsSource="{Binding SweepResults}"
+                                         SelectedItem="{Binding SelectedSweepResult}"
+                                         Height="112"
+                                         Margin="0,0,0,10">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                                               FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding SaturationState}"
+                                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                                               FontSize="11" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding SaturationText}"
+                                                           Foreground="{StaticResource WarningBrush}"
+                                                           VerticalAlignment="Center"
+                                                           Margin="12,0,0,0" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Content="Previous"
+                                            Command="{Binding PreviousSweepResultCommand}"
+                                            Margin="0,0,6,0" />
+                                    <Button Grid.Column="1"
+                                            Content="Next"
+                                            Command="{Binding NextSweepResultCommand}"
+                                            Margin="6,0,0,0" />
+                                </Grid>
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock Grid.Row="0" Text="Exposure" Style="{StaticResource LabelText}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedSweepExposureText}" Style="{StaticResource ValueText}" />
+                                    <TextBlock Grid.Row="1" Text="Frame" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedSweepFrameText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="2" Text="Mean" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedSweepMeanText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="3" Text="Min / Max" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedSweepMinMaxText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="4" Text="Saturation" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedSweepSaturationText}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="5" Text="State" Style="{StaticResource LabelText}" Margin="0,5,0,0" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedSweepSaturationState}" Style="{StaticResource ValueText}" Margin="0,5,0,0" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -397,7 +634,7 @@
                     <TextBlock Text="FRAME INFO"
                                Style="{StaticResource SectionHeadingText}"
                                Margin="0,0,0,10" />
-                    <UniformGrid Columns="3">
+                    <UniformGrid Columns="5">
                         <StackPanel>
                             <TextBlock Text="Minimum" Style="{StaticResource LabelText}" />
                             <TextBlock Text="{Binding MinimumPixelText}" Style="{StaticResource ValueText}" />
@@ -409,6 +646,14 @@
                         <StackPanel>
                             <TextBlock Text="Mean" Style="{StaticResource LabelText}" />
                             <TextBlock Text="{Binding MeanPixelText}" Style="{StaticResource ValueText}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Saturated" Style="{StaticResource LabelText}" />
+                            <TextBlock Text="{Binding SaturatedPixelText}" Style="{StaticResource ValueText}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="Saturation" Style="{StaticResource LabelText}" />
+                            <TextBlock Text="{Binding SaturationText}" Style="{StaticResource ValueText}" />
                         </StackPanel>
                     </UniformGrid>
                 </StackPanel>
@@ -423,9 +668,17 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
                     <TextBlock Text="HISTOGRAM"
                                Style="{StaticResource SectionHeadingText}"
                                Margin="0,0,0,10" />
+                    <TextBlock Grid.Column="1"
+                               Text="EXPOSURE RESPONSE"
+                               Style="{StaticResource SectionHeadingText}"
+                               Margin="14,0,0,10" />
                     <Grid Grid.Row="1">
                         <controls:HistogramControl Bins="{Binding HistogramBins}"
                                                    Stroke="{StaticResource AccentBrush}" />
@@ -434,6 +687,17 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    Visibility="{Binding NoPreviewImage, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                    </Grid>
+                    <Grid Grid.Row="1" Grid.Column="1" Margin="14,0,0,0">
+                        <controls:ExposureResponseChartControl Results="{Binding SweepResults}" />
+                        <TextBlock Text="Run an exposure sweep to chart exposure versus mean intensity."
+                                   Style="{StaticResource MutedText}"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   MaxWidth="320"
+                                   Visibility="{Binding HasSweepResults, Converter={StaticResource InverseBooleanToVisibilityConverter}}" />
                     </Grid>
                 </Grid>
             </Border>

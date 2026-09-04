@@ -22,6 +22,8 @@ public sealed class SimulatedCameraService : ICameraService
 
     public CaptureSettings CurrentSettings => _settings;
 
+    public CameraExposureRange ExposureRange { get; } = CameraExposureRange.Default;
+
     public async Task<IReadOnlyList<CameraDevice>> DiscoverAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -129,7 +131,7 @@ public sealed class SimulatedCameraService : ICameraService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!CameraExposureRange.TryValidate(exposure, out var errorMessage))
+        if (!ExposureRange.TryValidate(exposure, out var errorMessage))
         {
             throw new ArgumentOutOfRangeException(nameof(exposure), errorMessage);
         }

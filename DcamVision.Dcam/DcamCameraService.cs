@@ -10,6 +10,8 @@ public sealed class DcamCameraService : ICameraService
 
     public CaptureSettings CurrentSettings { get; } = new();
 
+    public CameraExposureRange ExposureRange { get; } = CameraExposureRange.Default;
+
     public Task<IReadOnlyList<CameraDevice>> DiscoverAsync(CancellationToken cancellationToken = default)
     {
         throw CreateDeferredException();
