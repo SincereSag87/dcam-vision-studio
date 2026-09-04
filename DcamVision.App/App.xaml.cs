@@ -19,6 +19,7 @@ public partial class App : Application
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information));
         services.AddSingleton<ICameraService, SimulatedCameraService>();
+        services.AddSingleton<ImageDisplayProcessor>();
         services.AddSingleton<ImagePreviewService>();
         services.AddSingleton(new LiveAcquisitionOptions
         {

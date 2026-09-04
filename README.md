@@ -10,6 +10,7 @@ The original project used Hamamatsu DCAM SDK sample code as a starting point. Th
 - Phase 2 - Complete
 - Phase 3 - Complete
 - Phase 4 - Complete
+- Phase 5 - Complete
 
 Phase 1 implemented the camera abstraction, a deterministic simulated camera, basic imaging helpers, unit tests, and a minimal WPF shell wired to the simulator. The simulator allows development and testing without physical camera hardware.
 
@@ -19,6 +20,8 @@ Phase 3 adds a complete exposure control workspace for scientific imaging. It in
 
 Phase 4 replaces the basic live loop with a robust producer/consumer live acquisition pipeline. It uses a bounded frame buffer, configurable overflow behavior, rolling acquisition/display FPS metrics, dropped-frame and source-gap tracking, preview throttling, latest-frame display semantics, pause/resume preview behavior, clean shutdown, and high-rate simulator testing. Pause Preview keeps acquisition running while presentation is paused; Resume Preview displays the newest available processed frame.
 
+Phase 5 adds a scientific image display and histogram-processing workspace. It preserves raw 16-bit camera data while applying display-only transforms for manual black/white LUT range, auto min/max contrast, percentile contrast, gamma, inversion, threshold visualization, advanced histogram statistics, histogram linear/log rendering, full/display histogram ranges, clipping analysis, display presets, and lightweight processing-time feedback.
+
 Hamamatsu DCAM integration is not complete yet. `DcamVision.Dcam` exists as the dedicated future adapter layer and intentionally contains only a placeholder implementation.
 
 ## Architecture
@@ -26,7 +29,7 @@ Hamamatsu DCAM integration is not complete yet. `DcamVision.Dcam` exists as the 
 - `DcamVision.App` - WPF desktop application and MVVM shell.
 - `DcamVision.Core` - interfaces, domain models, camera abstractions, capture settings, and simulated camera service.
 - `DcamVision.Dcam` - future Hamamatsu DCAM adapter layer.
-- `DcamVision.Imaging` - frame conversion, LUT, and histogram utilities.
+- `DcamVision.Imaging` - frame conversion, LUT/display processing, histogram analysis, and acquisition pipeline utilities.
 - `DcamVision.Tests` - xUnit coverage for simulator and imaging behavior.
 
 ## Build
@@ -65,7 +68,7 @@ dotnet test
 - DONE Phase 2 - Modern camera dashboard
 - DONE Phase 3 - Exposure controls and presets
 - DONE Phase 4 - Live acquisition pipeline
-- TODO Phase 5 - LUT and Advanced Histogram Processing
+- DONE Phase 5 - LUT and Advanced Histogram Processing
 - TODO Phase 6 - Dynamic camera property explorer
 - TODO Phase 7 - Capture history
 - TODO Phase 8 - Image and metadata export

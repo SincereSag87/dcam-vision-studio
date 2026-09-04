@@ -5,8 +5,19 @@ using DcamVision.Imaging;
 
 namespace DcamVision.App.Services;
 
+public sealed record ImagePreviewResult(
+    ImageSource Image,
+    DisplayFrame DisplayFrame);
+
 public sealed class ImagePreviewService
 {
+    private readonly ImageDisplayProcessor _processor;
+
+    public ImagePreviewService(ImageDisplayProcessor processor)
+    {
+        _processor = processor;
+    }
+
     public ImageSource CreatePreview(CameraFrame frame, bool autoContrast)
     {
         var statistics = FrameStatisticsCalculator.Calculate(frame);
@@ -27,5 +38,22 @@ public sealed class ImagePreviewService
         bitmap.Freeze();
 
         return bitmap;
+    }
+
+    public ImagePreviewResult CreatePreview(CameraFrame frame, ImageDisplaySettings settings)
+    {
+        var displayFrame = _processor.Process(frame, settings);
+        var bitmap = BitmapSource.Create(
+            frame.Width,
+            frame.Height,
+            96,
+            96,
+            PixelFormats.Gray8,
+            null,
+            displayFrame.Pixels,
+            frame.Width);
+        bitmap.Freeze();
+
+        return new ImagePreviewResult(bitmap, displayFrame);
     }
 }

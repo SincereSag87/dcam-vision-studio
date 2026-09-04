@@ -255,10 +255,19 @@ public sealed class LiveAcquisitionService
                     return;
                 }
 
+                var histogram = HistogramAnalyzer.Analyze(frame, bins: 256);
                 var processed = new ProcessedFrame(
                     frame,
-                    FrameStatisticsCalculator.Calculate(frame),
-                    HistogramCalculator.Calculate16Bit(frame, bins: 256));
+                    new FrameStatistics(
+                        histogram.Minimum,
+                        histogram.Maximum,
+                        histogram.Mean,
+                        frame.Width,
+                        frame.Height,
+                        frame.FrameNumber,
+                        histogram.SaturatedPixelCount,
+                        histogram.SaturationPercentage),
+                    histogram);
 
                 _latestProcessedFrame = processed;
                 Interlocked.Increment(ref _framesProcessed);

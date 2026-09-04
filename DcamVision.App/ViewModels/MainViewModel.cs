@@ -27,11 +27,23 @@ public sealed class MainViewModel : ObservableObject
     private TimeSpan _pendingExposure;
     private bool _isSynchronizingExposure;
     private FrameStatistics? _statistics;
+    private HistogramResult? _histogramResult;
+    private DisplayFrame? _displayFrame;
     private CameraFrame? _lastFrame;
     private int[] _histogramBins = [];
     private CancellationTokenSource? _sweepCancellation;
     private ApplicationOperation _operation = ApplicationOperation.Idle;
-    private bool _isAutoContrastEnabled;
+    private ImageDisplaySettings _displaySettings = ImageDisplaySettings.Default;
+    private AutoContrastMode _autoContrastMode = AutoContrastMode.Off;
+    private int _blackPointValue;
+    private int _whitePointValue = ushort.MaxValue;
+    private double _gammaValue = 1.0;
+    private bool _invertDisplay;
+    private bool _thresholdEnabled;
+    private int _thresholdValue = ushort.MaxValue / 2;
+    private HistogramScale _histogramScale = HistogramScale.Linear;
+    private HistogramDisplayRange _histogramDisplayRange = HistogramDisplayRange.Full;
+    private string _displayValidationMessage = string.Empty;
     private string _sweepStartValue = "1.000";
     private string _sweepEndValue = "100.000";
     private string _sweepStepValue = "10.000";
@@ -86,6 +98,8 @@ public sealed class MainViewModel : ObservableObject
         CancelSweepCommand = new RelayCommand(CancelSweep, () => IsSweepRunning);
         PreviousSweepResultCommand = new RelayCommand(SelectPreviousSweepResult, () => SelectedSweepResult?.Index > 0);
         NextSweepResultCommand = new RelayCommand(SelectNextSweepResult, () => SelectedSweepResult is not null && SelectedSweepResult.Index < SweepResults.Count - 1);
+        ResetDisplayCommand = new RelayCommand(ResetDisplay);
+        ApplyDisplayPresetCommand = new ParameterRelayCommand(ApplyDisplayPreset);
 
         _liveAcquisitionService.FrameReady += OnLiveFrameReady;
         _liveAcquisitionService.MetricsUpdated += OnLiveMetricsUpdated;
@@ -108,6 +122,34 @@ public sealed class MainViewModel : ObservableObject
         ExposureUnit.Microseconds,
         ExposureUnit.Milliseconds,
         ExposureUnit.Seconds
+    ];
+
+    public IReadOnlyList<AutoContrastMode> AutoContrastModes { get; } =
+    [
+        AutoContrastMode.Off,
+        AutoContrastMode.MinMax,
+        AutoContrastMode.Percentile
+    ];
+
+    public IReadOnlyList<HistogramScale> HistogramScales { get; } =
+    [
+        HistogramScale.Linear,
+        HistogramScale.Logarithmic
+    ];
+
+    public IReadOnlyList<HistogramDisplayRange> HistogramDisplayRanges { get; } =
+    [
+        HistogramDisplayRange.Full,
+        HistogramDisplayRange.Display
+    ];
+
+    public IReadOnlyList<DisplayPreset> DisplayPresets { get; } =
+    [
+        DisplayPreset.Raw,
+        DisplayPreset.AutoMinMax,
+        DisplayPreset.AutoPercentile,
+        DisplayPreset.HighContrast,
+        DisplayPreset.LowContrast
     ];
 
     public CameraDevice? SelectedDevice
@@ -230,17 +272,127 @@ public sealed class MainViewModel : ObservableObject
 
     public Visibility BusyVisibility => Operation is ApplicationOperation.Busy or ApplicationOperation.Sweep ? Visibility.Visible : Visibility.Collapsed;
 
-    public bool IsAutoContrastEnabled
+    public AutoContrastMode SelectedAutoContrastMode
     {
-        get => _isAutoContrastEnabled;
+        get => _autoContrastMode;
         set
         {
-            if (SetProperty(ref _isAutoContrastEnabled, value) && _lastFrame is not null)
+            if (SetProperty(ref _autoContrastMode, value))
             {
-                RefreshPreviewImage();
+                UpdateDisplaySettings();
             }
         }
     }
+
+    public int BlackPointValue
+    {
+        get => _blackPointValue;
+        set
+        {
+            if (SetProperty(ref _blackPointValue, Math.Clamp(value, ushort.MinValue, ushort.MaxValue)))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public int WhitePointValue
+    {
+        get => _whitePointValue;
+        set
+        {
+            if (SetProperty(ref _whitePointValue, Math.Clamp(value, ushort.MinValue, ushort.MaxValue)))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public double GammaValue
+    {
+        get => _gammaValue;
+        set
+        {
+            if (SetProperty(ref _gammaValue, value))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public bool InvertDisplay
+    {
+        get => _invertDisplay;
+        set
+        {
+            if (SetProperty(ref _invertDisplay, value))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public bool ThresholdEnabled
+    {
+        get => _thresholdEnabled;
+        set
+        {
+            if (SetProperty(ref _thresholdEnabled, value))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public int ThresholdValue
+    {
+        get => _thresholdValue;
+        set
+        {
+            if (SetProperty(ref _thresholdValue, Math.Clamp(value, ushort.MinValue, ushort.MaxValue)))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public HistogramScale SelectedHistogramScale
+    {
+        get => _histogramScale;
+        set
+        {
+            if (SetProperty(ref _histogramScale, value))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public HistogramDisplayRange SelectedHistogramDisplayRange
+    {
+        get => _histogramDisplayRange;
+        set
+        {
+            if (SetProperty(ref _histogramDisplayRange, value))
+            {
+                UpdateDisplaySettings();
+            }
+        }
+    }
+
+    public string DisplayValidationMessage
+    {
+        get => _displayValidationMessage;
+        private set
+        {
+            if (SetProperty(ref _displayValidationMessage, value))
+            {
+                OnPropertyChanged(nameof(HasDisplayValidationMessage));
+            }
+        }
+    }
+
+    public bool HasDisplayValidationMessage => !string.IsNullOrWhiteSpace(DisplayValidationMessage);
 
     public string HeaderStatusText => Operation is ApplicationOperation.Sweep
         ? "Exposure Sweep"
@@ -310,9 +462,35 @@ public sealed class MainViewModel : ObservableObject
 
     public string MeanPixelText => _statistics is null ? "-" : _statistics.Mean.ToString("0.0", CultureInfo.InvariantCulture);
 
+    public string MedianPixelText => _histogramResult is null ? "-" : _histogramResult.Median.ToString("0.0", CultureInfo.InvariantCulture);
+
+    public string StandardDeviationText => _histogramResult is null ? "-" : _histogramResult.StandardDeviation.ToString("0.0", CultureInfo.InvariantCulture);
+
+    public string PixelCountText => _histogramResult is null ? "-" : _histogramResult.PixelCount.ToString("N0", CultureInfo.InvariantCulture);
+
     public string SaturatedPixelText => _statistics is null ? "-" : _statistics.SaturatedPixelCount.ToString(CultureInfo.InvariantCulture);
 
     public string SaturationText => _statistics is null ? "-" : $"{_statistics.SaturationPercentage:0.0}%";
+
+    public ushort EffectiveBlackPoint => _displayFrame?.EffectiveBlackPoint ?? (ushort)BlackPointValue;
+
+    public ushort EffectiveWhitePoint => _displayFrame?.EffectiveWhitePoint ?? (ushort)WhitePointValue;
+
+    public string EffectiveDisplayRangeText => $"{EffectiveBlackPoint:N0} to {EffectiveWhitePoint:N0}";
+
+    public string BlackClippedText => _displayFrame is null
+        ? "-"
+        : $"{_displayFrame.Clipping.BlackClippedPixels:N0} ({_displayFrame.Clipping.BlackClippedPercentage:0.0}%)";
+
+    public string WhiteClippedText => _displayFrame is null
+        ? "-"
+        : $"{_displayFrame.Clipping.WhiteClippedPixels:N0} ({_displayFrame.Clipping.WhiteClippedPercentage:0.0}%)";
+
+    public string ThresholdSplitText => _displayFrame is null || !ThresholdEnabled
+        ? "-"
+        : $"{_displayFrame.Clipping.ThresholdBlackPixels:N0} below / {_displayFrame.Clipping.ThresholdWhitePixels:N0} above";
+
+    public string ProcessingTimeText => _displayFrame is null ? "-" : $"{_displayFrame.ProcessingTime.TotalMilliseconds:0.00} ms";
 
     public int[] HistogramBins
     {
@@ -525,6 +703,10 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand PreviousSweepResultCommand { get; }
 
     public RelayCommand NextSweepResultCommand { get; }
+
+    public RelayCommand ResetDisplayCommand { get; }
+
+    public ParameterRelayCommand ApplyDisplayPresetCommand { get; }
 
     private bool CanRunNormalOperation => Operation is ApplicationOperation.Idle && !IsLive;
 
@@ -871,8 +1053,17 @@ public sealed class MainViewModel : ObservableObject
     private void PresentFrame(CameraFrame frame)
     {
         _lastFrame = frame;
-        _statistics = FrameStatisticsCalculator.Calculate(frame);
-        HistogramBins = HistogramCalculator.Calculate16Bit(frame, bins: 256);
+        _histogramResult = HistogramAnalyzer.Analyze(frame, bins: 256);
+        _statistics = new FrameStatistics(
+            _histogramResult.Minimum,
+            _histogramResult.Maximum,
+            _histogramResult.Mean,
+            frame.Width,
+            frame.Height,
+            frame.FrameNumber,
+            _histogramResult.SaturatedPixelCount,
+            _histogramResult.SaturationPercentage);
+        HistogramBins = _histogramResult.Bins;
         RefreshPreviewImage();
         RefreshFrameReadouts();
     }
@@ -881,16 +1072,26 @@ public sealed class MainViewModel : ObservableObject
     {
         _lastFrame = processedFrame.Frame;
         _statistics = processedFrame.Statistics;
-        HistogramBins = processedFrame.Histogram;
+        _histogramResult = processedFrame.HistogramResult;
+        HistogramBins = processedFrame.HistogramResult.Bins;
         RefreshPreviewImage();
         RefreshFrameReadouts();
     }
 
     private void RefreshPreviewImage()
     {
-        PreviewImage = _lastFrame is null
-            ? null
-            : _imagePreviewService.CreatePreview(_lastFrame, IsAutoContrastEnabled);
+        if (_lastFrame is null)
+        {
+            PreviewImage = null;
+            _displayFrame = null;
+            RefreshDisplayReadouts();
+            return;
+        }
+
+        var preview = _imagePreviewService.CreatePreview(_lastFrame, _displaySettings);
+        _displayFrame = preview.DisplayFrame;
+        PreviewImage = preview.Image;
+        RefreshDisplayReadouts();
     }
 
     private async Task RunBusyOperationAsync(Func<Task> operation)
@@ -1068,6 +1269,70 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HeaderSimulatorText));
     }
 
+    private void UpdateDisplaySettings()
+    {
+        var candidate = _displaySettings with
+        {
+            AutoContrastMode = SelectedAutoContrastMode,
+            BlackPoint = (ushort)BlackPointValue,
+            WhitePoint = (ushort)WhitePointValue,
+            Gamma = GammaValue,
+            Invert = InvertDisplay,
+            ThresholdEnabled = ThresholdEnabled,
+            ThresholdValue = (ushort)ThresholdValue,
+            HistogramScale = SelectedHistogramScale,
+            HistogramDisplayRange = SelectedHistogramDisplayRange
+        };
+
+        try
+        {
+            candidate.Validate();
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+        {
+            DisplayValidationMessage = exception.Message;
+            RefreshDisplayReadouts();
+            return;
+        }
+
+        _displaySettings = candidate;
+        DisplayValidationMessage = string.Empty;
+        RefreshPreviewImage();
+    }
+
+    private void ResetDisplay()
+    {
+        ApplyDisplaySettings(ImageDisplaySettings.Default);
+        StatusMessage = "Display processing reset.";
+    }
+
+    private void ApplyDisplayPreset(object? parameter)
+    {
+        if (parameter is not DisplayPreset preset)
+        {
+            return;
+        }
+
+        ApplyDisplaySettings(_displaySettings.ApplyPreset(preset));
+        StatusMessage = $"Display preset applied: {preset}.";
+    }
+
+    private void ApplyDisplaySettings(ImageDisplaySettings settings)
+    {
+        _displaySettings = settings;
+        DisplayValidationMessage = string.Empty;
+        SetProperty(ref _autoContrastMode, settings.AutoContrastMode, nameof(SelectedAutoContrastMode));
+        SetProperty(ref _blackPointValue, settings.BlackPoint, nameof(BlackPointValue));
+        SetProperty(ref _whitePointValue, settings.WhitePoint, nameof(WhitePointValue));
+        SetProperty(ref _gammaValue, settings.Gamma, nameof(GammaValue));
+        SetProperty(ref _invertDisplay, settings.Invert, nameof(InvertDisplay));
+        SetProperty(ref _thresholdEnabled, settings.ThresholdEnabled, nameof(ThresholdEnabled));
+        SetProperty(ref _thresholdValue, settings.ThresholdValue, nameof(ThresholdValue));
+        SetProperty(ref _histogramScale, settings.HistogramScale, nameof(SelectedHistogramScale));
+        SetProperty(ref _histogramDisplayRange, settings.HistogramDisplayRange, nameof(SelectedHistogramDisplayRange));
+        RefreshPreviewImage();
+    }
+
     private void RefreshFrameReadouts()
     {
         OnPropertyChanged(nameof(FrameNumberText));
@@ -1078,8 +1343,23 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(MinimumPixelText));
         OnPropertyChanged(nameof(MaximumPixelText));
         OnPropertyChanged(nameof(MeanPixelText));
+        OnPropertyChanged(nameof(MedianPixelText));
+        OnPropertyChanged(nameof(StandardDeviationText));
+        OnPropertyChanged(nameof(PixelCountText));
         OnPropertyChanged(nameof(SaturatedPixelText));
         OnPropertyChanged(nameof(SaturationText));
+        RefreshDisplayReadouts();
+    }
+
+    private void RefreshDisplayReadouts()
+    {
+        OnPropertyChanged(nameof(EffectiveBlackPoint));
+        OnPropertyChanged(nameof(EffectiveWhitePoint));
+        OnPropertyChanged(nameof(EffectiveDisplayRangeText));
+        OnPropertyChanged(nameof(BlackClippedText));
+        OnPropertyChanged(nameof(WhiteClippedText));
+        OnPropertyChanged(nameof(ThresholdSplitText));
+        OnPropertyChanged(nameof(ProcessingTimeText));
     }
 
     private void RefreshSelectedSweepResult()
