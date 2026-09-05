@@ -23,4 +23,11 @@ public interface ICameraService
     Task SetExposureAsync(TimeSpan exposure, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<CameraProperty>> GetPropertiesAsync(CancellationToken cancellationToken = default);
+
+    Task<CameraProperty?> GetPropertyAsync(string propertyId, CancellationToken cancellationToken = default);
+
+    Task<CameraPropertyUpdateResult> SetPropertyAsync(
+        string propertyId,
+        object value,
+        CancellationToken cancellationToken = default);
 }

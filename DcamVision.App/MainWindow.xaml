@@ -629,6 +629,137 @@
 
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <StackPanel>
+                                <TextBlock Text="Camera Property Explorer"
+                                           Style="{StaticResource SectionHeadingText}"
+                                           Margin="0,0,0,10" />
+                                <TextBlock Text="Search" Style="{StaticResource LabelText}" />
+                                <TextBox Text="{Binding PropertyExplorer.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Search display name, property ID, category, or description"
+                                         Margin="0,4,0,8" />
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox ItemsSource="{Binding PropertyExplorer.CategoryOptions}"
+                                              SelectedItem="{Binding PropertyExplorer.SelectedCategory}"
+                                              ToolTip="Filter by property category"
+                                              Margin="0,0,8,0" />
+                                    <CheckBox Grid.Column="1"
+                                              Content="Writable only"
+                                              IsChecked="{Binding PropertyExplorer.WritableOnly}"
+                                              VerticalAlignment="Center" />
+                                </Grid>
+                                <TextBlock Text="{Binding PropertyExplorer.CountsText}"
+                                           Style="{StaticResource MutedText}"
+                                           Margin="0,0,0,8" />
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding PropertyExplorer.Message}"
+                                               Style="{StaticResource MutedText}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1"
+                                            Content="Refresh"
+                                            Command="{Binding PropertyExplorer.RefreshCommand}"
+                                            ToolTip="Reload authoritative camera property values"
+                                            Margin="8,0,0,0" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding PropertyExplorer.FilteredProperties}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{StaticResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    Background="#121B24"
+                                                    Padding="10"
+                                                    Margin="0,0,0,10">
+                                                <StackPanel>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Category}"
+                                                                       Style="{StaticResource LabelText}" />
+                                                            <TextBlock Text="{Binding DisplayName}"
+                                                                       Style="{StaticResource ValueText}" />
+                                                            <TextBlock Text="{Binding Id}"
+                                                                       Style="{StaticResource MutedText}" />
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding AccessText}"
+                                                                   Style="{StaticResource LabelText}"
+                                                                   Margin="8,0,0,0" />
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Description}"
+                                                               Style="{StaticResource MutedText}"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,6,0,0" />
+                                                    <TextBlock Text="{Binding MetadataText}"
+                                                               Style="{StaticResource MutedText}"
+                                                               TextWrapping="Wrap"
+                                                               Margin="0,4,0,8" />
+                                                    <TextBlock Text="{Binding CurrentValueText, StringFormat=Current: {0}}"
+                                                               Style="{StaticResource MutedText}"
+                                                               Margin="0,0,0,6" />
+
+                                                    <TextBox Text="{Binding EditableValue, UpdateSourceTrigger=PropertyChanged}"
+                                                             IsEnabled="{Binding CanEdit}"
+                                                             Visibility="{Binding IsNumericOrText, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                             Margin="0,0,0,6" />
+                                                    <CheckBox Content="Enabled"
+                                                              IsChecked="{Binding EditableBoolean}"
+                                                              IsEnabled="{Binding CanEdit}"
+                                                              Visibility="{Binding IsBoolean, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                              Margin="0,0,0,6" />
+                                                    <ComboBox ItemsSource="{Binding Options}"
+                                                              SelectedItem="{Binding SelectedOption}"
+                                                              DisplayMemberPath="DisplayName"
+                                                              IsEnabled="{Binding CanEdit}"
+                                                              Visibility="{Binding IsEnumeration, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                              Margin="0,0,0,6" />
+
+                                                    <TextBlock Text="{Binding ErrorMessage}"
+                                                               Foreground="{StaticResource WarningBrush}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"
+                                                               Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                               Margin="0,0,0,6" />
+
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Modified"
+                                                                   Style="{StaticResource MutedText}"
+                                                                   Visibility="{Binding IsDirty, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                                   VerticalAlignment="Center" />
+                                                        <Button Grid.Column="1"
+                                                                Content="Revert"
+                                                                Command="{Binding RevertCommand}"
+                                                                Margin="8,0,0,0" />
+                                                        <Button Grid.Column="2"
+                                                                Content="Apply"
+                                                                Command="{Binding ApplyCommand}"
+                                                                Style="{StaticResource PrimaryButton}"
+                                                                Margin="8,0,0,0" />
+                                                    </Grid>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
+                            <StackPanel>
                                 <TextBlock Text="Exposure Sweep"
                                            Style="{StaticResource SectionHeadingText}"
                                            Margin="0,0,0,10" />

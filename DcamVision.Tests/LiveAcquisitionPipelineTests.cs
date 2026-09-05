@@ -431,5 +431,15 @@ public sealed class LiveAcquisitionPipelineTests
         {
             return Task.FromResult<IReadOnlyList<CameraProperty>>([]);
         }
+
+        public Task<CameraProperty?> GetPropertyAsync(string propertyId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<CameraProperty?>(null);
+        }
+
+        public Task<CameraPropertyUpdateResult> SetPropertyAsync(string propertyId, object value, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(CameraPropertyUpdateResult.Failed("No scripted properties are available."));
+        }
     }
 }

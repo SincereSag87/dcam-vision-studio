@@ -76,6 +76,8 @@ public sealed class MainViewModel : ObservableObject
         _logger = logger;
         _sliderMapper = new ExposureSliderMapper(_cameraService.ExposureRange);
         _liveMetrics = _liveAcquisitionService.Metrics;
+        PropertyExplorer = new CameraPropertyExplorerViewModel(_cameraService, () => IsLive);
+        PropertyExplorer.PropertyApplied += OnDynamicPropertyApplied;
         _pendingExposure = _cameraService.CurrentSettings.Exposure;
         _exposureValue = FormatExposureValue(_pendingExposure, _selectedExposureUnit);
         _exposureSliderValue = _sliderMapper.ToSliderValue(_pendingExposure);
@@ -116,6 +118,8 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<ExposurePresetViewModel> ExposurePresets { get; } = [];
 
     public ObservableCollection<SweepResultFrameViewModel> SweepResults { get; } = [];
+
+    public CameraPropertyExplorerViewModel PropertyExplorer { get; }
 
     public IReadOnlyList<ExposureUnit> ExposureUnits { get; } =
     [
@@ -760,6 +764,7 @@ public sealed class MainViewModel : ObservableObject
 
                 await _cameraService.DisconnectAsync();
                 PropertySummaries.Clear();
+                await PropertyExplorer.RefreshAsync();
                 StatusMessage = "Camera disconnected.";
             }
             else
@@ -774,6 +779,7 @@ public sealed class MainViewModel : ObservableObject
                 await _cameraService.ConnectAsync(SelectedDevice.Id);
                 SyncPendingExposure(_cameraService.CurrentSettings.Exposure);
                 await RefreshPropertiesAsync();
+                await PropertyExplorer.RefreshAsync();
                 StatusMessage = $"Connected to {SelectedDevice.DisplayName}.";
             }
         });
@@ -797,6 +803,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         await _liveAcquisitionService.StartAsync();
+        PropertyExplorer.SetStreamingStateChanged();
         StatusMessage = "Live acquisition started.";
     }
 
@@ -817,6 +824,7 @@ public sealed class MainViewModel : ObservableObject
     private async Task StopLiveAsync()
     {
         await _liveAcquisitionService.StopAsync();
+        PropertyExplorer.SetStreamingStateChanged();
         StatusMessage = "Live acquisition stopped.";
         RefreshOperationState();
     }
@@ -846,6 +854,7 @@ public sealed class MainViewModel : ObservableObject
             await _cameraService.SetExposureAsync(exposure);
             SyncPendingExposure(exposure);
             await RefreshPropertiesAsync();
+            await PropertyExplorer.RefreshAsync();
             StatusMessage = $"Exposure updated to {ExposureUnitConverter.Format(exposure)}.";
         });
     }
@@ -898,6 +907,7 @@ public sealed class MainViewModel : ObservableObject
             Operation = ApplicationOperation.Idle;
             SyncPendingExposure(_cameraService.CurrentSettings.Exposure);
             await RefreshPropertiesAsync();
+            await PropertyExplorer.RefreshAsync();
             OnPropertyChanged(nameof(HasSweepResults));
         }
     }
@@ -1031,23 +1041,23 @@ public sealed class MainViewModel : ObservableObject
         var properties = await _cameraService.GetPropertiesAsync();
         PropertySummaries.Clear();
 
-        AddPropertySummary(properties, "gain");
-        AddPropertySummary(properties, "width");
-        AddPropertySummary(properties, "height");
-        AddPropertySummary(properties, "pixelFormat");
-        AddPropertySummary(properties, "triggerMode");
+        AddPropertySummary(properties, "exposure.time");
+        AddPropertySummary(properties, "sensor.gain");
+        AddPropertySummary(properties, "image.width");
+        AddPropertySummary(properties, "image.height");
+        AddPropertySummary(properties, "image.pixelFormat");
+        AddPropertySummary(properties, "trigger.mode");
     }
 
     private void AddPropertySummary(IReadOnlyList<CameraProperty> properties, string name)
     {
-        var property = properties.FirstOrDefault(candidate => candidate.Name == name);
+        var property = properties.FirstOrDefault(candidate => candidate.Id == name);
         if (property is null)
         {
             return;
         }
 
-        var value = property.Unit is null ? property.Value.ToString() : $"{property.Value} {property.Unit}";
-        PropertySummaries.Add(new CameraPropertySummary(property.DisplayName, value ?? string.Empty));
+        PropertySummaries.Add(new CameraPropertySummary(property.DisplayName, property.FormatValue()));
     }
 
     private void PresentFrame(CameraFrame frame)
@@ -1232,7 +1242,25 @@ public sealed class MainViewModel : ObservableObject
 
     private void OnLiveStateChanged(object? sender, LiveAcquisitionState state)
     {
-        _ = Application.Current.Dispatcher.InvokeAsync(RefreshOperationState);
+        _ = Application.Current.Dispatcher.InvokeAsync(() =>
+        {
+            PropertyExplorer.SetStreamingStateChanged();
+            RefreshOperationState();
+        });
+    }
+
+    private void OnDynamicPropertyApplied(object? sender, CameraProperty property)
+    {
+        if (property.Id == "exposure.time")
+        {
+            SyncPendingExposure(_cameraService.CurrentSettings.Exposure);
+        }
+
+        _ = Application.Current.Dispatcher.InvokeAsync(async () =>
+        {
+            await RefreshPropertiesAsync();
+            RefreshOperationState();
+        });
     }
 
     private void OnLiveFaulted(object? sender, Exception exception)

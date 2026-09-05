@@ -47,6 +47,19 @@ public sealed class DcamCameraService : ICameraService
         throw CreateDeferredException();
     }
 
+    public Task<CameraProperty?> GetPropertyAsync(string propertyId, CancellationToken cancellationToken = default)
+    {
+        throw CreateDeferredException();
+    }
+
+    public Task<CameraPropertyUpdateResult> SetPropertyAsync(
+        string propertyId,
+        object value,
+        CancellationToken cancellationToken = default)
+    {
+        throw CreateDeferredException();
+    }
+
     private static NotImplementedException CreateDeferredException()
     {
         return new NotImplementedException("Hamamatsu DCAM integration is deferred to Phase 9.");

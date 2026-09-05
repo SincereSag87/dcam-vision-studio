@@ -16,6 +16,11 @@ public sealed class SimulatedCameraService : ICameraService
     private readonly SimulatedCameraOptions _options;
     private CaptureSettings _settings = new();
     private long _frameNumber;
+    private string _triggerPolarity = "Rising Edge";
+    private int _binning = 1;
+    private string _readoutSpeed = "Normal";
+    private bool _coolingEnabled = true;
+    private string _fanMode = "Low";
 
     public SimulatedCameraService()
         : this(new SimulatedCameraOptions())
@@ -159,18 +164,311 @@ public sealed class SimulatedCameraService : ICameraService
     public Task<IReadOnlyList<CameraProperty>> GetPropertiesAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(BuildProperties());
+    }
 
-        IReadOnlyList<CameraProperty> properties =
+    public Task<CameraProperty?> GetPropertyAsync(string propertyId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var property = BuildProperties().FirstOrDefault(candidate => string.Equals(candidate.Id, propertyId, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(property);
+    }
+
+    public Task<CameraPropertyUpdateResult> SetPropertyAsync(
+        string propertyId,
+        object value,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureConnected();
+
+        var property = BuildProperties().FirstOrDefault(candidate => string.Equals(candidate.Id, propertyId, StringComparison.OrdinalIgnoreCase));
+        if (property is null)
+        {
+            return Task.FromResult(CameraPropertyUpdateResult.Failed($"Camera property '{propertyId}' was not found."));
+        }
+
+        var validation = CameraPropertyValidator.ValidateWrite(property, value, State is CameraConnectionState.Streaming);
+        if (!validation.Success || validation.UpdatedProperty is null)
+        {
+            return Task.FromResult(validation);
+        }
+
+        ApplyProperty(validation.UpdatedProperty);
+        var updated = BuildProperties().First(candidate => string.Equals(candidate.Id, property.Id, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(CameraPropertyUpdateResult.Updated(updated));
+    }
+
+    private IReadOnlyList<CameraProperty> BuildProperties()
+    {
+        var read = CameraPropertyAccess.Read;
+        var readWrite = CameraPropertyAccess.Read | CameraPropertyAccess.Write;
+        var writeLive = CameraPropertyAccess.Read | CameraPropertyAccess.Write | CameraPropertyAccess.WriteWhileStreaming;
+        var triggerExternal = string.Equals(_settings.TriggerMode, "External", StringComparison.Ordinal);
+
+        return
         [
-            new("exposure", "Exposure Time", _settings.Exposure.TotalMilliseconds, "ms", 0.1, 10_000.0),
-            new("gain", "Gain", _settings.Gain, "x", 1.0, 8.0),
-            new("width", "Width", _settings.Width, "px", 64, 4096, IsReadOnly: true),
-            new("height", "Height", _settings.Height, "px", 64, 4096, IsReadOnly: true),
-            new("pixelFormat", "Pixel Format", _settings.PixelFormat, null, IsReadOnly: true),
-            new("triggerMode", "Trigger Mode", _settings.TriggerMode)
+            new CameraProperty
+            {
+                Id = "acquisition.frameRate",
+                DisplayName = "Frame Rate",
+                Description = "Nominal simulator live acquisition frame rate.",
+                Category = CameraPropertyCategories.Acquisition,
+                DisplayOrder = 10,
+                PropertyType = CameraPropertyType.FloatingPoint,
+                Value = _options.FramesPerSecond,
+                Minimum = 1.0,
+                Maximum = 240.0,
+                Step = 1.0,
+                Unit = "fps",
+                Access = read
+            },
+            new CameraProperty
+            {
+                Id = "exposure.time",
+                DisplayName = "Exposure Time",
+                Description = "Camera integration time.",
+                Category = CameraPropertyCategories.Exposure,
+                DisplayOrder = 20,
+                PropertyType = CameraPropertyType.FloatingPoint,
+                Value = _settings.Exposure.TotalMilliseconds,
+                Minimum = ExposureRange.Minimum.TotalMilliseconds,
+                Maximum = ExposureRange.Maximum.TotalMilliseconds,
+                Step = 0.1,
+                Unit = "ms",
+                Access = writeLive
+            },
+            new CameraProperty
+            {
+                Id = "sensor.gain",
+                DisplayName = "Gain",
+                Description = "Sensor amplification.",
+                Category = CameraPropertyCategories.Sensor,
+                DisplayOrder = 30,
+                PropertyType = CameraPropertyType.FloatingPoint,
+                Value = _settings.Gain,
+                Minimum = 1.0,
+                Maximum = 8.0,
+                Step = 0.1,
+                Unit = "x",
+                Access = writeLive
+            },
+            new CameraProperty
+            {
+                Id = "sensor.temperature",
+                DisplayName = "Sensor Temperature",
+                Description = "Deterministic simulated sensor temperature.",
+                Category = CameraPropertyCategories.Sensor,
+                DisplayOrder = 40,
+                PropertyType = CameraPropertyType.FloatingPoint,
+                Value = _coolingEnabled ? -12.4 : 21.0,
+                Unit = "°C",
+                Access = read
+            },
+            new CameraProperty
+            {
+                Id = "image.width",
+                DisplayName = "Width",
+                Description = "Frame width.",
+                Category = CameraPropertyCategories.Image,
+                DisplayOrder = 50,
+                PropertyType = CameraPropertyType.Integer,
+                Value = _settings.Width,
+                Minimum = 64,
+                Maximum = 4096,
+                Step = 1,
+                Unit = "px",
+                Access = readWrite
+            },
+            new CameraProperty
+            {
+                Id = "image.height",
+                DisplayName = "Height",
+                Description = "Frame height.",
+                Category = CameraPropertyCategories.Image,
+                DisplayOrder = 60,
+                PropertyType = CameraPropertyType.Integer,
+                Value = _settings.Height,
+                Minimum = 64,
+                Maximum = 4096,
+                Step = 1,
+                Unit = "px",
+                Access = readWrite
+            },
+            new CameraProperty
+            {
+                Id = "image.pixelFormat",
+                DisplayName = "Pixel Format",
+                Description = "Pixel encoding used by captured frames.",
+                Category = CameraPropertyCategories.Image,
+                DisplayOrder = 70,
+                PropertyType = CameraPropertyType.Enumeration,
+                Value = _settings.PixelFormat.ToString(),
+                Options = [new("Mono16", "Mono16")],
+                Access = read
+            },
+            new CameraProperty
+            {
+                Id = "trigger.mode",
+                DisplayName = "Trigger Mode",
+                Description = "Acquisition trigger source.",
+                Category = CameraPropertyCategories.Trigger,
+                DisplayOrder = 80,
+                PropertyType = CameraPropertyType.Enumeration,
+                Value = _settings.TriggerMode,
+                Options = [new("Internal", "Internal"), new("External", "External"), new("Software", "Software")],
+                Access = readWrite
+            },
+            new CameraProperty
+            {
+                Id = "trigger.polarity",
+                DisplayName = "Trigger Polarity",
+                Description = "External trigger edge polarity.",
+                Category = CameraPropertyCategories.Trigger,
+                DisplayOrder = 90,
+                PropertyType = CameraPropertyType.Enumeration,
+                Value = _triggerPolarity,
+                Options = [new("Rising Edge", "Rising Edge"), new("Falling Edge", "Falling Edge")],
+                Access = triggerExternal ? readWrite : read,
+                IsAvailable = triggerExternal,
+                AvailabilityReason = "Trigger Polarity is available when Trigger Mode is External."
+            },
+            new CameraProperty
+            {
+                Id = "image.binning",
+                DisplayName = "Binning",
+                Description = "Sensor binning factor.",
+                Category = CameraPropertyCategories.Image,
+                DisplayOrder = 100,
+                PropertyType = CameraPropertyType.Enumeration,
+                Value = _binning,
+                Options = [new(1, "1x1"), new(2, "2x2"), new(4, "4x4")],
+                Access = readWrite
+            },
+            new CameraProperty
+            {
+                Id = "sensor.readoutSpeed",
+                DisplayName = "Readout Speed",
+                Description = "Readout speed profile.",
+                Category = CameraPropertyCategories.Sensor,
+                DisplayOrder = 110,
+                PropertyType = CameraPropertyType.Enumeration,
+                Value = _readoutSpeed,
+                Options = [new("Slow", "Slow"), new("Normal", "Normal"), new("Fast", "Fast")],
+                Access = readWrite
+            },
+            new CameraProperty
+            {
+                Id = "sensor.coolingEnabled",
+                DisplayName = "Cooling Enabled",
+                Description = "Controls simulated sensor cooling.",
+                Category = CameraPropertyCategories.Sensor,
+                DisplayOrder = 120,
+                PropertyType = CameraPropertyType.Boolean,
+                Value = _coolingEnabled,
+                Access = writeLive
+            },
+            new CameraProperty
+            {
+                Id = "device.fanMode",
+                DisplayName = "Fan Mode",
+                Description = "Cooling fan behavior.",
+                Category = CameraPropertyCategories.Device,
+                DisplayOrder = 130,
+                PropertyType = CameraPropertyType.Enumeration,
+                Value = _fanMode,
+                Options = [new("Off", "Off"), new("Low", "Low"), new("High", "High")],
+                Access = _coolingEnabled ? readWrite : read,
+                IsAvailable = _coolingEnabled,
+                AvailabilityReason = "Fan Mode is available when Cooling Enabled is on."
+            },
+            new CameraProperty
+            {
+                Id = "device.manufacturer",
+                DisplayName = "Manufacturer",
+                Description = "Camera manufacturer.",
+                Category = CameraPropertyCategories.Device,
+                DisplayOrder = 140,
+                PropertyType = CameraPropertyType.Text,
+                Value = SimulatedDevice.Manufacturer,
+                Access = read
+            },
+            new CameraProperty
+            {
+                Id = "device.model",
+                DisplayName = "Model",
+                Description = "Camera model.",
+                Category = CameraPropertyCategories.Device,
+                DisplayOrder = 150,
+                PropertyType = CameraPropertyType.Text,
+                Value = SimulatedDevice.Model,
+                Access = read
+            },
+            new CameraProperty
+            {
+                Id = "device.serialNumber",
+                DisplayName = "Serial Number",
+                Description = "Camera serial number.",
+                Category = CameraPropertyCategories.Device,
+                DisplayOrder = 160,
+                PropertyType = CameraPropertyType.Text,
+                Value = SimulatedDevice.SerialNumber,
+                Access = read
+            },
+            new CameraProperty
+            {
+                Id = "device.firmwareVersion",
+                DisplayName = "Firmware Version",
+                Description = "Simulated camera firmware version.",
+                Category = CameraPropertyCategories.Device,
+                DisplayOrder = 170,
+                PropertyType = CameraPropertyType.Text,
+                Value = "SIM-2026.09",
+                Access = read
+            }
         ];
+    }
 
-        return Task.FromResult(properties);
+    private void ApplyProperty(CameraProperty property)
+    {
+        switch (property.Id)
+        {
+            case "exposure.time":
+                _settings = _settings with { Exposure = TimeSpan.FromMilliseconds(Convert.ToDouble(property.Value)) };
+                break;
+            case "sensor.gain":
+                _settings = _settings with { Gain = Convert.ToDouble(property.Value) };
+                break;
+            case "image.width":
+                _settings = _settings with { Width = Convert.ToInt32(property.Value) };
+                break;
+            case "image.height":
+                _settings = _settings with { Height = Convert.ToInt32(property.Value) };
+                break;
+            case "trigger.mode":
+                _settings = _settings with { TriggerMode = Convert.ToString(property.Value) ?? "Internal" };
+                break;
+            case "trigger.polarity":
+                _triggerPolarity = Convert.ToString(property.Value) ?? "Rising Edge";
+                break;
+            case "image.binning":
+                _binning = Convert.ToInt32(property.Value);
+                break;
+            case "sensor.readoutSpeed":
+                _readoutSpeed = Convert.ToString(property.Value) ?? "Normal";
+                break;
+            case "sensor.coolingEnabled":
+                _coolingEnabled = Convert.ToBoolean(property.Value);
+                if (!_coolingEnabled)
+                {
+                    _fanMode = "Off";
+                }
+
+                break;
+            case "device.fanMode":
+                _fanMode = Convert.ToString(property.Value) ?? "Low";
+                break;
+        }
     }
 
     private CameraFrame GenerateFrame(long frameNumber)
