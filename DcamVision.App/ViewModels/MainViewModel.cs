@@ -17,6 +17,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly ExposureSweepRunner _sweepRunner;
     private readonly CaptureHistoryStore _captureHistoryStore;
     private readonly CaptureRecordFactory _captureRecordFactory;
+    private readonly ICaptureExportService _captureExportService;
     private readonly ILogger<MainViewModel> _logger;
     private readonly ExposureSliderMapper _sliderMapper;
     private CameraDevice? _selectedDevice;
@@ -73,6 +74,7 @@ public sealed class MainViewModel : ObservableObject
         ExposureSweepRunner sweepRunner,
         CaptureHistoryStore captureHistoryStore,
         CaptureRecordFactory captureRecordFactory,
+        ICaptureExportService captureExportService,
         ILogger<MainViewModel> logger)
     {
         _cameraService = cameraService;
@@ -81,6 +83,7 @@ public sealed class MainViewModel : ObservableObject
         _sweepRunner = sweepRunner;
         _captureHistoryStore = captureHistoryStore;
         _captureRecordFactory = captureRecordFactory;
+        _captureExportService = captureExportService;
         _logger = logger;
         _sliderMapper = new ExposureSliderMapper(_cameraService.ExposureRange);
         _liveMetrics = _liveAcquisitionService.Metrics;
@@ -88,6 +91,8 @@ public sealed class MainViewModel : ObservableObject
         PropertyExplorer.PropertyApplied += OnDynamicPropertyApplied;
         CaptureHistory = new CaptureHistoryViewModel(
             _captureHistoryStore,
+            _captureExportService,
+            () => _displaySettings,
             () => MessageBox.Show(
                 "Clear all in-memory capture history for this run?",
                 "Clear Capture History",

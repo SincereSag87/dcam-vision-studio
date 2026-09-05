@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using DcamVision.Core;
 using DcamVision.Imaging;
 
@@ -9,6 +10,8 @@ public sealed class CaptureHistoryViewModel : ObservableObject
 {
     private readonly CaptureHistoryStore _store;
     private readonly Func<bool> _confirmClearHistory;
+    private readonly ICaptureExportService _exportService;
+    private readonly Func<ImageDisplaySettings> _getDisplaySettings;
     private string _searchText = string.Empty;
     private CaptureSessionViewModel _selectedSession = CaptureSessionViewModel.All;
     private CaptureSource? _selectedSource;
@@ -21,10 +24,31 @@ public sealed class CaptureHistoryViewModel : ObservableObject
     private string _notesText = string.Empty;
     private string _tagText = string.Empty;
     private string _sessionName = string.Empty;
+    private string _exportDirectory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        "DcamVisionExports");
+    private string _filenameTemplate = CaptureExportOptions.DefaultFilenameTemplate;
+    private bool _exportTiff16 = true;
+    private bool _exportPngPreview = true;
+    private bool _exportRawMono16;
+    private bool _exportJsonMetadata = true;
+    private bool _createManifest = true;
+    private ExportDirectoryLayout _exportDirectoryLayout = ExportDirectoryLayout.BySession;
+    private ExportCollisionBehavior _exportCollisionBehavior = ExportCollisionBehavior.Rename;
+    private bool _isExporting;
+    private string _exportStatus = "No export running.";
+    private double _exportProgressValue;
+    private CancellationTokenSource? _exportCancellation;
 
-    public CaptureHistoryViewModel(CaptureHistoryStore store, Func<bool>? confirmClearHistory = null)
+    public CaptureHistoryViewModel(
+        CaptureHistoryStore store,
+        ICaptureExportService exportService,
+        Func<ImageDisplaySettings> getDisplaySettings,
+        Func<bool>? confirmClearHistory = null)
     {
         _store = store;
+        _exportService = exportService;
+        _getDisplaySettings = getDisplaySettings;
         _confirmClearHistory = confirmClearHistory ?? (() => true);
         NewSessionCommand = new RelayCommand(NewSession);
         RenameSessionCommand = new RelayCommand(RenameSession, () => _store.ActiveSession is not null && !string.IsNullOrWhiteSpace(SessionName));
@@ -35,6 +59,10 @@ public sealed class CaptureHistoryViewModel : ObservableObject
         ClearHistoryCommand = new RelayCommand(ClearHistory, () => Captures.Count > 0);
         SetCompareACommand = new RelayCommand(SetCompareA, () => SelectedCapture is not null);
         SetCompareBCommand = new RelayCommand(SetCompareB, () => SelectedCapture is not null);
+        ExportSelectedCommand = new AsyncRelayCommand(ExportSelectedAsync, () => SelectedCapture is not null && !IsExporting && HasAnyExportFormat);
+        ExportFilteredCommand = new AsyncRelayCommand(ExportFilteredAsync, () => Captures.Count > 0 && !IsExporting && HasAnyExportFormat);
+        ExportSessionCommand = new AsyncRelayCommand(ExportSessionAsync, () => SelectedSession.SessionId is not null && !IsExporting && HasAnyExportFormat);
+        CancelExportCommand = new RelayCommand(CancelExport, () => IsExporting);
 
         RefreshFromStore();
     }
@@ -72,6 +100,14 @@ public sealed class CaptureHistoryViewModel : ObservableObject
     public RelayCommand SetCompareACommand { get; }
 
     public RelayCommand SetCompareBCommand { get; }
+
+    public AsyncRelayCommand ExportSelectedCommand { get; }
+
+    public AsyncRelayCommand ExportFilteredCommand { get; }
+
+    public AsyncRelayCommand ExportSessionCommand { get; }
+
+    public RelayCommand CancelExportCommand { get; }
 
     public event EventHandler<CaptureRecord>? SelectedCaptureChanged;
 
@@ -191,6 +227,156 @@ public sealed class CaptureHistoryViewModel : ObservableObject
             {
                 RenameSessionCommand.RaiseCanExecuteChanged();
             }
+        }
+    }
+
+    public string ExportDirectory
+    {
+        get => _exportDirectory;
+        set
+        {
+            if (SetProperty(ref _exportDirectory, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public string FilenameTemplate
+    {
+        get => _filenameTemplate;
+        set
+        {
+            if (SetProperty(ref _filenameTemplate, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public bool ExportTiff16
+    {
+        get => _exportTiff16;
+        set
+        {
+            if (SetProperty(ref _exportTiff16, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public bool ExportPngPreview
+    {
+        get => _exportPngPreview;
+        set
+        {
+            if (SetProperty(ref _exportPngPreview, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public bool ExportRawMono16
+    {
+        get => _exportRawMono16;
+        set
+        {
+            if (SetProperty(ref _exportRawMono16, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public bool ExportJsonMetadata
+    {
+        get => _exportJsonMetadata;
+        set
+        {
+            if (SetProperty(ref _exportJsonMetadata, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public bool CreateManifest
+    {
+        get => _createManifest;
+        set
+        {
+            if (SetProperty(ref _createManifest, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public ExportDirectoryLayout ExportDirectoryLayout
+    {
+        get => _exportDirectoryLayout;
+        set => SetProperty(ref _exportDirectoryLayout, value);
+    }
+
+    public ExportCollisionBehavior ExportCollisionBehavior
+    {
+        get => _exportCollisionBehavior;
+        set => SetProperty(ref _exportCollisionBehavior, value);
+    }
+
+    public IReadOnlyList<ExportDirectoryLayout> ExportDirectoryLayouts { get; } =
+    [
+        ExportDirectoryLayout.Flat,
+        ExportDirectoryLayout.BySession
+    ];
+
+    public IReadOnlyList<ExportCollisionBehavior> ExportCollisionBehaviors { get; } =
+    [
+        ExportCollisionBehavior.Rename,
+        ExportCollisionBehavior.Skip,
+        ExportCollisionBehavior.Overwrite
+    ];
+
+    public bool IsExporting
+    {
+        get => _isExporting;
+        private set
+        {
+            if (SetProperty(ref _isExporting, value))
+            {
+                RefreshExportState();
+            }
+        }
+    }
+
+    public string ExportStatus
+    {
+        get => _exportStatus;
+        private set => SetProperty(ref _exportStatus, value);
+    }
+
+    public double ExportProgressValue
+    {
+        get => _exportProgressValue;
+        private set => SetProperty(ref _exportProgressValue, value);
+    }
+
+    public bool HasAnyExportFormat => ExportTiff16 || ExportPngPreview || ExportRawMono16 || ExportJsonMetadata;
+
+    public string EstimatedExportSizeText
+    {
+        get
+        {
+            var captures = Captures.Select(capture => capture.Record).ToArray();
+            if (captures.Length == 0 || !HasAnyExportFormat)
+            {
+                return "Estimated export size: 0 MB";
+            }
+
+            var request = CreateRequest(captures);
+            return $"Estimated export size: ~{CaptureExportSizeEstimator.EstimateBytes(request) / 1024.0 / 1024.0:0.0} MB";
         }
     }
 
@@ -325,6 +511,7 @@ public sealed class CaptureHistoryViewModel : ObservableObject
         OnPropertyChanged(nameof(SummaryText));
         ClearMissingCompareSelections();
         ClearHistoryCommand.RaiseCanExecuteChanged();
+        RefreshExportState();
     }
 
     private void NewSession()
@@ -456,5 +643,106 @@ public sealed class CaptureHistoryViewModel : ObservableObject
         }
 
         RefreshCompareFlags();
+    }
+
+    private async Task ExportSelectedAsync()
+    {
+        if (SelectedCapture is null)
+        {
+            return;
+        }
+
+        await RunExportAsync([SelectedCapture.Record]);
+    }
+
+    private async Task ExportFilteredAsync()
+    {
+        await RunExportAsync(Captures.Select(capture => capture.Record).ToArray());
+    }
+
+    private async Task ExportSessionAsync()
+    {
+        if (SelectedSession.SessionId is null)
+        {
+            return;
+        }
+
+        await RunExportAsync(_store.Captures.Where(capture => capture.SessionId == SelectedSession.SessionId).ToArray());
+    }
+
+    private async Task RunExportAsync(IReadOnlyList<CaptureRecord> captures)
+    {
+        if (captures.Count == 0)
+        {
+            ExportStatus = "No captures selected for export.";
+            return;
+        }
+
+        _exportCancellation = new CancellationTokenSource();
+        IsExporting = true;
+        ExportProgressValue = 0;
+        ExportStatus = $"Exporting {captures.Count} capture(s)...";
+        var progress = new Progress<CaptureExportProgress>(value =>
+        {
+            ExportProgressValue = value.Percentage;
+            ExportStatus = value.CurrentFormat is null
+                ? $"Exported {value.CompletedCaptures} / {value.TotalCaptures}"
+                : $"Exporting {value.CompletedCaptures + 1} / {value.TotalCaptures}: {value.CurrentFormat} {value.CurrentCaptureName}";
+        });
+
+        try
+        {
+            var result = await _exportService.ExportAsync(CreateRequest(captures), progress, _exportCancellation.Token);
+            ExportProgressValue = result.WasCanceled ? ExportProgressValue : 100;
+            ExportStatus = result.Summary;
+        }
+        catch (Exception exception)
+        {
+            ExportStatus = $"Export failed: {exception.Message}";
+        }
+        finally
+        {
+            _exportCancellation.Dispose();
+            _exportCancellation = null;
+            IsExporting = false;
+        }
+    }
+
+    private void CancelExport()
+    {
+        _exportCancellation?.Cancel();
+        ExportStatus = "Cancelling export...";
+    }
+
+    private CaptureExportRequest CreateRequest(IReadOnlyList<CaptureRecord> captures)
+    {
+        return new CaptureExportRequest
+        {
+            Captures = captures,
+            Sessions = _store.Sessions,
+            OutputDirectory = ExportDirectory,
+            Options = new CaptureExportOptions
+            {
+                ExportTiff16 = ExportTiff16,
+                ExportPngPreview = ExportPngPreview,
+                ExportRawMono16 = ExportRawMono16,
+                ExportJsonMetadata = ExportJsonMetadata,
+                CreateManifest = CreateManifest,
+                FilenameTemplate = FilenameTemplate,
+                DirectoryLayout = ExportDirectoryLayout,
+                CollisionBehavior = ExportCollisionBehavior,
+                PreviewDisplaySettings = _getDisplaySettings()
+            }
+        };
+    }
+
+    private void RefreshExportState()
+    {
+        OnPropertyChanged(nameof(HasAnyExportFormat));
+        OnPropertyChanged(nameof(EstimatedExportSizeText));
+        ExportSelectedCommand.RaiseCanExecuteChanged();
+        ExportFilteredCommand.RaiseCanExecuteChanged();
+        ExportSessionCommand.RaiseCanExecuteChanged();
+        CancelExportCommand.RaiseCanExecuteChanged();
     }
 }

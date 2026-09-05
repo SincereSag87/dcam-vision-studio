@@ -23,6 +23,7 @@ public partial class App : Application
         services.AddSingleton<ImagePreviewService>();
         services.AddSingleton<CaptureHistoryStore>();
         services.AddSingleton<CaptureRecordFactory>();
+        services.AddSingleton<ICaptureExportService, CaptureExportService>();
         services.AddSingleton(new LiveAcquisitionOptions
         {
             BufferCapacity = 4,

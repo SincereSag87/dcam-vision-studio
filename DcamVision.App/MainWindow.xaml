@@ -747,6 +747,74 @@
                                            TextWrapping="Wrap"
                                            Margin="0,8,0,10" />
 
+                                <TextBlock Text="Export Captures"
+                                           Style="{StaticResource LabelText}"
+                                           Margin="0,0,0,6" />
+                                <TextBox Text="{Binding CaptureHistory.ExportDirectory, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Destination folder for explicit image and metadata export"
+                                         Margin="0,0,0,6" />
+                                <TextBox Text="{Binding CaptureHistory.FilenameTemplate, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Filename template: {session}, {timestamp}, {captureIndex}, {exposure}, {source}, {frameNumber}, {cameraModel}, {captureId}"
+                                         Margin="0,0,0,8" />
+                                <UniformGrid Columns="2" Margin="0,0,0,8">
+                                    <CheckBox Content="16-bit TIFF"
+                                              IsChecked="{Binding CaptureHistory.ExportTiff16}" />
+                                    <CheckBox Content="PNG Preview"
+                                              IsChecked="{Binding CaptureHistory.ExportPngPreview}" />
+                                    <CheckBox Content="Raw Mono16"
+                                              IsChecked="{Binding CaptureHistory.ExportRawMono16}" />
+                                    <CheckBox Content="JSON Metadata"
+                                              IsChecked="{Binding CaptureHistory.ExportJsonMetadata}" />
+                                    <CheckBox Content="Manifest"
+                                              IsChecked="{Binding CaptureHistory.CreateManifest}" />
+                                </UniformGrid>
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,6,0">
+                                        <TextBlock Text="Layout" Style="{StaticResource LabelText}" />
+                                        <ComboBox ItemsSource="{Binding CaptureHistory.ExportDirectoryLayouts}"
+                                                  SelectedItem="{Binding CaptureHistory.ExportDirectoryLayout}"
+                                                  Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                        <TextBlock Text="Collision" Style="{StaticResource LabelText}" />
+                                        <ComboBox ItemsSource="{Binding CaptureHistory.ExportCollisionBehaviors}"
+                                                  SelectedItem="{Binding CaptureHistory.ExportCollisionBehavior}"
+                                                  Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock Text="{Binding CaptureHistory.EstimatedExportSizeText}"
+                                           Style="{StaticResource MutedText}"
+                                           Margin="0,0,0,6" />
+                                <ProgressBar Minimum="0"
+                                             Maximum="100"
+                                             Value="{Binding CaptureHistory.ExportProgressValue, Mode=OneWay}"
+                                             Height="8"
+                                             Margin="0,0,0,6" />
+                                <TextBlock Text="{Binding CaptureHistory.ExportStatus}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,8" />
+                                <UniformGrid Columns="2" Margin="0,0,0,8">
+                                    <Button Content="Export Capture"
+                                            Command="{Binding CaptureHistory.ExportSelectedCommand}"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Margin="0,0,6,6" />
+                                    <Button Content="Export Filtered"
+                                            Command="{Binding CaptureHistory.ExportFilteredCommand}"
+                                            Margin="6,0,0,6" />
+                                    <Button Content="Export Session"
+                                            Command="{Binding CaptureHistory.ExportSessionCommand}"
+                                            Margin="0,0,6,0" />
+                                    <Button Content="Cancel Export"
+                                            Command="{Binding CaptureHistory.CancelExportCommand}"
+                                            Style="{StaticResource DangerButton}"
+                                            Margin="6,0,0,0" />
+                                </UniformGrid>
+
                                 <TextBlock Text="Selected Capture"
                                            Style="{StaticResource LabelText}"
                                            Margin="0,0,0,6" />
