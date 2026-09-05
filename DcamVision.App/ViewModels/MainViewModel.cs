@@ -15,6 +15,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly ImagePreviewService _imagePreviewService;
     private readonly LiveAcquisitionService _liveAcquisitionService;
     private readonly ExposureSweepRunner _sweepRunner;
+    private readonly CaptureHistoryStore _captureHistoryStore;
+    private readonly CaptureRecordFactory _captureRecordFactory;
     private readonly ILogger<MainViewModel> _logger;
     private readonly ExposureSliderMapper _sliderMapper;
     private CameraDevice? _selectedDevice;
@@ -27,9 +29,11 @@ public sealed class MainViewModel : ObservableObject
     private TimeSpan _pendingExposure;
     private bool _isSynchronizingExposure;
     private FrameStatistics? _statistics;
+    private FrameStatistics? _currentStatistics;
     private HistogramResult? _histogramResult;
     private DisplayFrame? _displayFrame;
     private CameraFrame? _lastFrame;
+    private CameraFrame? _currentFrame;
     private int[] _histogramBins = [];
     private CancellationTokenSource? _sweepCancellation;
     private ApplicationOperation _operation = ApplicationOperation.Idle;
@@ -67,17 +71,29 @@ public sealed class MainViewModel : ObservableObject
         ImagePreviewService imagePreviewService,
         LiveAcquisitionService liveAcquisitionService,
         ExposureSweepRunner sweepRunner,
+        CaptureHistoryStore captureHistoryStore,
+        CaptureRecordFactory captureRecordFactory,
         ILogger<MainViewModel> logger)
     {
         _cameraService = cameraService;
         _imagePreviewService = imagePreviewService;
         _liveAcquisitionService = liveAcquisitionService;
         _sweepRunner = sweepRunner;
+        _captureHistoryStore = captureHistoryStore;
+        _captureRecordFactory = captureRecordFactory;
         _logger = logger;
         _sliderMapper = new ExposureSliderMapper(_cameraService.ExposureRange);
         _liveMetrics = _liveAcquisitionService.Metrics;
         PropertyExplorer = new CameraPropertyExplorerViewModel(_cameraService, () => IsLive);
         PropertyExplorer.PropertyApplied += OnDynamicPropertyApplied;
+        CaptureHistory = new CaptureHistoryViewModel(
+            _captureHistoryStore,
+            () => MessageBox.Show(
+                "Clear all in-memory capture history for this run?",
+                "Clear Capture History",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) == MessageBoxResult.Yes);
+        CaptureHistory.SelectedCaptureChanged += OnHistoryCaptureSelected;
         _pendingExposure = _cameraService.CurrentSettings.Exposure;
         _exposureValue = FormatExposureValue(_pendingExposure, _selectedExposureUnit);
         _exposureSliderValue = _sliderMapper.ToSliderValue(_pendingExposure);
@@ -102,6 +118,8 @@ public sealed class MainViewModel : ObservableObject
         NextSweepResultCommand = new RelayCommand(SelectNextSweepResult, () => SelectedSweepResult is not null && SelectedSweepResult.Index < SweepResults.Count - 1);
         ResetDisplayCommand = new RelayCommand(ResetDisplay);
         ApplyDisplayPresetCommand = new ParameterRelayCommand(ApplyDisplayPreset);
+        SaveCurrentFrameCommand = new AsyncRelayCommand(SaveCurrentFrameAsync, () => _currentFrame is not null);
+        ReturnToCurrentFrameCommand = new RelayCommand(ReturnToCurrentFrame, () => _currentFrame is not null);
 
         _liveAcquisitionService.FrameReady += OnLiveFrameReady;
         _liveAcquisitionService.MetricsUpdated += OnLiveMetricsUpdated;
@@ -120,6 +138,8 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<SweepResultFrameViewModel> SweepResults { get; } = [];
 
     public CameraPropertyExplorerViewModel PropertyExplorer { get; }
+
+    public CaptureHistoryViewModel CaptureHistory { get; }
 
     public IReadOnlyList<ExposureUnit> ExposureUnits { get; } =
     [
@@ -182,6 +202,8 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public bool NoPreviewImage => PreviewImage is null;
+
+    public string PreviewModeText => CaptureHistory.SelectedCapture is null ? "CURRENT VIEW" : $"HISTORY VIEW #{CaptureHistory.SelectedCapture.Record.SequenceNumber}";
 
     public bool NoDevices => Devices.Count == 0;
 
@@ -712,6 +734,10 @@ public sealed class MainViewModel : ObservableObject
 
     public ParameterRelayCommand ApplyDisplayPresetCommand { get; }
 
+    public AsyncRelayCommand SaveCurrentFrameCommand { get; }
+
+    public RelayCommand ReturnToCurrentFrameCommand { get; }
+
     private bool CanRunNormalOperation => Operation is ApplicationOperation.Idle && !IsLive;
 
     private bool CanToggleConnection => Operation is ApplicationOperation.Idle && (IsConnected || SelectedDevice is not null);
@@ -790,7 +816,9 @@ public sealed class MainViewModel : ObservableObject
         await RunBusyOperationAsync(async () =>
         {
             StatusMessage = "Capturing frame...";
-            PresentFrame(await _cameraService.CaptureAsync());
+            var frame = await _cameraService.CaptureAsync();
+            PresentFrame(frame);
+            await AddCaptureToHistoryAsync(frame, CaptureSource.Manual, _statistics);
             StatusMessage = $"Captured frame #{FrameNumberText}.";
         });
     }
@@ -883,13 +911,15 @@ public sealed class MainViewModel : ObservableObject
             SweepResults.Clear();
             for (var i = 0; i < result.Frames.Count; i++)
             {
-                SweepResults.Add(new SweepResultFrameViewModel(i, result.Frames[i]));
+                var sweepFrame = result.Frames[i];
+                SweepResults.Add(new SweepResultFrameViewModel(i, sweepFrame));
+                await AddCaptureToHistoryAsync(sweepFrame.Frame, CaptureSource.ExposureSweep, sweepFrame.Statistics);
             }
 
             OnPropertyChanged(nameof(SweepResults));
             OnPropertyChanged(nameof(HasSweepResults));
             SelectedSweepResult = SweepResults.FirstOrDefault();
-            StatusMessage = $"Exposure sweep complete: {result.Frames.Count} frame(s).";
+            StatusMessage = $"Exposure sweep complete: {result.Frames.Count} frame(s) retained in history.";
         }
         catch (OperationCanceledException)
         {
@@ -921,6 +951,47 @@ public sealed class MainViewModel : ObservableObject
 
         _sweepCancellation.Cancel();
         StatusMessage = "Cancelling exposure sweep...";
+    }
+
+    private async Task SaveCurrentFrameAsync()
+    {
+        if (_currentFrame is null)
+        {
+            StatusMessage = "No current frame is available to save.";
+            return;
+        }
+
+        await AddCaptureToHistoryAsync(_currentFrame, IsLive ? CaptureSource.Live : CaptureSource.Manual, _currentStatistics);
+        StatusMessage = $"Saved current frame #{_currentFrame.FrameNumber} to capture history.";
+    }
+
+    private void ReturnToCurrentFrame()
+    {
+        if (_currentFrame is null)
+        {
+            return;
+        }
+
+        CaptureHistory.SelectedCapture = null;
+        PresentFrame(_currentFrame);
+        StatusMessage = "Returned to current frame view.";
+        OnPropertyChanged(nameof(PreviewModeText));
+    }
+
+    private async Task AddCaptureToHistoryAsync(
+        CameraFrame frame,
+        CaptureSource source,
+        FrameStatistics? statistics)
+    {
+        var session = _captureHistoryStore.EnsureActiveSession();
+        var record = await _captureRecordFactory.CreateAsync(
+            session.SessionId,
+            sequenceNumber: 0,
+            frame,
+            source,
+            statistics);
+        _captureHistoryStore.AddCapture(record);
+        CaptureHistory.RefreshFromStore();
     }
 
     private bool TryCreateSweepSettings(out ExposureSweepSettings settings)
@@ -1060,9 +1131,14 @@ public sealed class MainViewModel : ObservableObject
         PropertySummaries.Add(new CameraPropertySummary(property.DisplayName, property.FormatValue()));
     }
 
-    private void PresentFrame(CameraFrame frame)
+    private void PresentFrame(CameraFrame frame, bool updateCurrent = true)
     {
         _lastFrame = frame;
+        if (updateCurrent)
+        {
+            _currentFrame = frame;
+        }
+
         _histogramResult = HistogramAnalyzer.Analyze(frame, bins: 256);
         _statistics = new FrameStatistics(
             _histogramResult.Minimum,
@@ -1073,16 +1149,37 @@ public sealed class MainViewModel : ObservableObject
             frame.FrameNumber,
             _histogramResult.SaturatedPixelCount,
             _histogramResult.SaturationPercentage);
+        if (updateCurrent)
+        {
+            _currentStatistics = _statistics;
+            OnPropertyChanged(nameof(PreviewModeText));
+            SaveCurrentFrameCommand.RaiseCanExecuteChanged();
+            ReturnToCurrentFrameCommand.RaiseCanExecuteChanged();
+        }
+
         HistogramBins = _histogramResult.Bins;
         RefreshPreviewImage();
         RefreshFrameReadouts();
     }
 
-    private void PresentFrame(ProcessedFrame processedFrame)
+    private void PresentFrame(ProcessedFrame processedFrame, bool updateCurrent = true)
     {
         _lastFrame = processedFrame.Frame;
+        if (updateCurrent)
+        {
+            _currentFrame = processedFrame.Frame;
+        }
+
         _statistics = processedFrame.Statistics;
         _histogramResult = processedFrame.HistogramResult;
+        if (updateCurrent)
+        {
+            _currentStatistics = _statistics;
+            OnPropertyChanged(nameof(PreviewModeText));
+            SaveCurrentFrameCommand.RaiseCanExecuteChanged();
+            ReturnToCurrentFrameCommand.RaiseCanExecuteChanged();
+        }
+
         HistogramBins = processedFrame.HistogramResult.Bins;
         RefreshPreviewImage();
         RefreshFrameReadouts();
@@ -1225,7 +1322,18 @@ public sealed class MainViewModel : ObservableObject
     {
         _ = Application.Current.Dispatcher.InvokeAsync(() =>
         {
-            PresentFrame(frame);
+            if (CaptureHistory.SelectedCapture is not null)
+            {
+                _currentFrame = frame.Frame;
+                _currentStatistics = frame.Statistics;
+                SaveCurrentFrameCommand.RaiseCanExecuteChanged();
+                ReturnToCurrentFrameCommand.RaiseCanExecuteChanged();
+            }
+            else
+            {
+                PresentFrame(frame);
+            }
+
             StatusMessage = IsPreviewPaused ? "Live preview paused. Acquisition continues." : $"Live frame #{FrameNumberText}.";
             RefreshOperationState();
         });
@@ -1261,6 +1369,13 @@ public sealed class MainViewModel : ObservableObject
             await RefreshPropertiesAsync();
             RefreshOperationState();
         });
+    }
+
+    private void OnHistoryCaptureSelected(object? sender, CaptureRecord record)
+    {
+        PresentFrame(record.Frame, updateCurrent: false);
+        StatusMessage = $"Viewing historical capture #{record.SequenceNumber}.";
+        OnPropertyChanged(nameof(PreviewModeText));
     }
 
     private void OnLiveFaulted(object? sender, Exception exception)

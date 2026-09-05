@@ -193,6 +193,20 @@
                         <TextBlock Text="LIVE IMAGE VIEW"
                                    Style="{StaticResource SectionHeadingText}" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBlock Text="{Binding PreviewModeText}"
+                                       Style="{StaticResource MutedText}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,12,0" />
+                            <Button Content="Return Current"
+                                    Command="{Binding ReturnToCurrentFrameCommand}"
+                                    Style="{StaticResource ToolbarButton}"
+                                    ToolTip="Return the preview to the latest current frame"
+                                    Margin="0,0,8,0" />
+                            <Button Content="Save Current"
+                                    Command="{Binding SaveCurrentFrameCommand}"
+                                    Style="{StaticResource ToolbarButton}"
+                                    ToolTip="Save the latest current frame to capture history"
+                                    Margin="0,0,12,0" />
                             <Button Content="Fit"
                                     Style="{StaticResource ToolbarButton}"
                                     IsEnabled="False"
@@ -624,6 +638,193 @@
                                            Style="{StaticResource MutedText}"
                                            TextWrapping="Wrap"
                                            Visibility="{Binding IsDisconnected, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="Capture History"
+                                           Style="{StaticResource SectionHeadingText}"
+                                           Margin="0,0,0,10" />
+                                <TextBlock Text="{Binding CaptureHistory.SummaryText}"
+                                           Style="{StaticResource MutedText}"
+                                           Margin="0,0,0,8" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding CaptureHistory.SessionName, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Active capture session name"
+                                             Margin="0,0,8,0" />
+                                    <Button Grid.Column="1"
+                                            Content="Rename"
+                                            Command="{Binding CaptureHistory.RenameSessionCommand}" />
+                                </Grid>
+                                <Button Content="New Session"
+                                        Command="{Binding CaptureHistory.NewSessionCommand}"
+                                        ToolTip="Start a new in-memory capture session"
+                                        Margin="0,0,0,10" />
+
+                                <TextBlock Text="Search" Style="{StaticResource LabelText}" />
+                                <TextBox Text="{Binding CaptureHistory.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Search notes, tags, model, serial, session, ID, or source"
+                                         Margin="0,4,0,8" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,6,0">
+                                        <TextBlock Text="Session" Style="{StaticResource LabelText}" />
+                                        <ComboBox ItemsSource="{Binding CaptureHistory.Sessions}"
+                                                  SelectedItem="{Binding CaptureHistory.SelectedSession}"
+                                                  DisplayMemberPath="Name"
+                                                  Margin="0,4,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                        <TextBlock Text="Source" Style="{StaticResource LabelText}" />
+                                        <ComboBox ItemsSource="{Binding CaptureHistory.SourceOptions}"
+                                                  SelectedItem="{Binding CaptureHistory.SelectedSource}"
+                                                  Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </Grid>
+                                <ComboBox ItemsSource="{Binding CaptureHistory.SortModes}"
+                                          SelectedItem="{Binding CaptureHistory.SelectedSortMode}"
+                                          ToolTip="Sort capture history"
+                                          Margin="0,0,0,8" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Content="Tagged only"
+                                              IsChecked="{Binding CaptureHistory.TaggedOnly}" />
+                                    <CheckBox Grid.Column="1"
+                                              Content="Saturated only"
+                                              IsChecked="{Binding CaptureHistory.SaturatedOnly}" />
+                                </Grid>
+                                <TextBlock Text="{Binding CaptureHistory.FilterSummaryText}"
+                                           Style="{StaticResource MutedText}"
+                                           Margin="0,0,0,8" />
+
+                                <ListBox ItemsSource="{Binding CaptureHistory.Captures}"
+                                         SelectedItem="{Binding CaptureHistory.SelectedCapture}"
+                                         MaxHeight="260"
+                                         Background="#0D141C"
+                                         BorderBrush="{StaticResource BorderBrush}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="4">
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           Style="{StaticResource ValueText}" />
+                                                <TextBlock Text="{Binding DetailText}"
+                                                           Style="{StaticResource MutedText}" />
+                                                <TextBlock Text="{Binding SessionName}"
+                                                           Style="{StaticResource MutedText}" />
+                                                <TextBlock Text="{Binding TagsText}"
+                                                           Style="{StaticResource MutedText}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button Content="Compare A"
+                                            Command="{Binding CaptureHistory.SetCompareACommand}"
+                                            Margin="0,0,6,0" />
+                                    <Button Grid.Column="1"
+                                            Content="Compare B"
+                                            Command="{Binding CaptureHistory.SetCompareBCommand}"
+                                            Margin="6,0,0,0" />
+                                </Grid>
+                                <TextBlock Text="{Binding CaptureHistory.ComparisonText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,10" />
+
+                                <TextBlock Text="Selected Capture"
+                                           Style="{StaticResource LabelText}"
+                                           Margin="0,0,0,6" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureIdText, StringFormat=ID: {0}}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureSessionText, StringFormat=Session: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureSourceText, StringFormat=Source: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureTimestampText, StringFormat=Timestamp: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureCameraText, StringFormat=Camera: {0}}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureExposureText, StringFormat=Exposure: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureGainText, StringFormat=Gain: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureResolutionText, StringFormat=Resolution: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureFormatText, StringFormat=Format: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureTriggerText, StringFormat=Trigger: {0}}"
+                                           Style="{StaticResource MutedText}" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCaptureStatisticsText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CaptureHistory.SelectedCapturePropertySnapshotText, StringFormat=Properties: {0}}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,10" />
+
+                                <TextBlock Text="Notes" Style="{StaticResource LabelText}" />
+                                <TextBox Text="{Binding CaptureHistory.NotesText, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True"
+                                         Height="58"
+                                         TextWrapping="Wrap"
+                                         ToolTip="In-memory notes for the selected capture"
+                                         Margin="0,4,0,6" />
+                                <Button Content="Save Notes"
+                                        Command="{Binding CaptureHistory.SaveNotesCommand}"
+                                        Margin="0,0,0,8" />
+
+                                <TextBlock Text="Tags" Style="{StaticResource LabelText}" />
+                                <Grid Margin="0,4,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding CaptureHistory.TagText, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Add a tag to the selected capture"
+                                             Margin="0,0,8,0" />
+                                    <Button Grid.Column="1"
+                                            Content="Add"
+                                            Command="{Binding CaptureHistory.AddTagCommand}" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding CaptureHistory.SelectedCapture.Record.Tags}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{Binding}"
+                                                    Command="{Binding DataContext.CaptureHistory.RemoveTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Margin="0,0,6,6" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <UniformGrid Columns="2" Margin="0,4,0,0">
+                                    <Button Content="Delete Capture"
+                                            Command="{Binding CaptureHistory.DeleteCaptureCommand}"
+                                            Style="{StaticResource DangerButton}"
+                                            Margin="0,0,6,0" />
+                                    <Button Content="Clear History"
+                                            Command="{Binding CaptureHistory.ClearHistoryCommand}"
+                                            Style="{StaticResource DangerButton}"
+                                            Margin="6,0,0,0" />
+                                </UniformGrid>
                             </StackPanel>
                         </Border>
 

@@ -12,6 +12,7 @@ The original project used Hamamatsu DCAM SDK sample code as a starting point. Th
 - Phase 4 - Complete
 - Phase 5 - Complete
 - Phase 6 - Complete
+- Phase 7 - Complete
 
 Phase 1 implemented the camera abstraction, a deterministic simulated camera, basic imaging helpers, unit tests, and a minimal WPF shell wired to the simulator. The simulator allows development and testing without physical camera hardware.
 
@@ -25,6 +26,8 @@ Phase 5 adds a scientific image display and histogram-processing workspace. It p
 
 Phase 6 adds a metadata-driven dynamic camera property explorer. Camera properties now include stable IDs, categories, descriptions, data types, ranges, units, enum options, access metadata, streaming-write rules, and availability state. The WPF explorer supports search, category filtering, writable-only filtering, metadata-driven editors, Apply/Revert, friendly validation errors, simulator dependency rules, and synchronization with exposure workflows. The model is designed so a future DCAM adapter can map real Hamamatsu property metadata without hardcoded WPF controls.
 
+Phase 7 adds in-memory capture history and session management. Manual captures are retained automatically, exposure-sweep frames are retained at sweep completion, and live frames can be saved deliberately with Save Current. Each record owns a cloned frame buffer, immutable capture-time metadata, camera property snapshots, statistics, notes, and tags. History supports bounded retention, memory estimates, session creation/rename, selected historical frame viewing, local search/filter/sort, notes/tags, deletion, clear confirmation, and two-capture comparison metrics. Capture history is currently in-memory only.
+
 Hamamatsu DCAM integration is not complete yet. `DcamVision.Dcam` exists as the dedicated future adapter layer and intentionally contains only a placeholder implementation.
 
 ## Architecture
@@ -32,7 +35,7 @@ Hamamatsu DCAM integration is not complete yet. `DcamVision.Dcam` exists as the 
 - `DcamVision.App` - WPF desktop application and MVVM shell.
 - `DcamVision.Core` - interfaces, domain models, camera abstractions, capture settings, property metadata, validation, and simulated camera service.
 - `DcamVision.Dcam` - future Hamamatsu DCAM adapter layer.
-- `DcamVision.Imaging` - frame conversion, LUT/display processing, histogram analysis, and acquisition pipeline utilities.
+- `DcamVision.Imaging` - frame conversion, LUT/display processing, histogram analysis, acquisition pipeline utilities, and in-memory capture history.
 - `DcamVision.Tests` - xUnit coverage for simulator and imaging behavior.
 
 ## Build
@@ -73,7 +76,7 @@ dotnet test
 - DONE Phase 4 - Live acquisition pipeline
 - DONE Phase 5 - LUT and Advanced Histogram Processing
 - DONE Phase 6 - Dynamic camera property explorer
-- TODO Phase 7 - Capture history
+- DONE Phase 7 - Capture history
 - TODO Phase 8 - Image and metadata export
 - TODO Phase 9 - Hamamatsu DCAM adapter
 - TODO Phase 10 - Diagnostics and logging

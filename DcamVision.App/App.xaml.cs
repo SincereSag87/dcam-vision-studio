@@ -21,6 +21,8 @@ public partial class App : Application
         services.AddSingleton<ICameraService, SimulatedCameraService>();
         services.AddSingleton<ImageDisplayProcessor>();
         services.AddSingleton<ImagePreviewService>();
+        services.AddSingleton<CaptureHistoryStore>();
+        services.AddSingleton<CaptureRecordFactory>();
         services.AddSingleton(new LiveAcquisitionOptions
         {
             BufferCapacity = 4,
