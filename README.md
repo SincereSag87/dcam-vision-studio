@@ -14,6 +14,7 @@ The original project used Hamamatsu DCAM SDK sample code as a starting point. Th
 - Phase 6 - Complete
 - Phase 7 - Complete
 - Phase 8 - Complete
+- Phase 9 - Complete
 
 Phase 1 implemented the camera abstraction, a deterministic simulated camera, basic imaging helpers, unit tests, and a minimal WPF shell wired to the simulator. The simulator allows development and testing without physical camera hardware.
 
@@ -31,13 +32,15 @@ Phase 7 adds in-memory capture history and session management. Manual captures a
 
 Phase 8 adds explicit image and metadata export from capture history. It supports single-capture, filtered batch, and session exports with 16-bit scientific TIFF, 8-bit PNG previews, optional raw Mono16 files, JSON metadata sidecars, filename templates, Windows-safe collision handling, by-session directory layout, progress/cancellation, atomic file writes, export manifests, checksums, and approximate export-size estimates. Scientific TIFF and raw exports preserve the original 16-bit pixel data; display processing applies only to preview PNG files. Capture history remains in-memory unless the user explicitly exports selected captures.
 
-Hamamatsu DCAM integration is not complete yet. `DcamVision.Dcam` exists as the dedicated future adapter layer and intentionally contains only a placeholder implementation.
+Phase 9 adds the native Hamamatsu DCAM adapter behind the existing `ICameraService` architecture. The application now supports Auto, Simulator, and Hamamatsu DCAM camera sources, checks whether `dcamapi.dll` can be loaded, initializes/uninitializes the DCAM API through an isolated runtime service, enumerates hardware devices when available, maps native properties into the metadata-driven property explorer, converts exposure values between DCAM seconds and application `TimeSpan`, captures/streams copied Mono16/Mono8 frames, and keeps simulator fallback available when the runtime or hardware is missing. Hardware-specific tests are isolated from normal unit tests.
+
+Hamamatsu DCAM runtime and driver binaries are external dependencies and are not distributed with this repository. Install the supported Hamamatsu DCAM-API runtime and camera driver separately, use an x64 process/runtime combination, then select Auto or Hamamatsu DCAM in the application. If the runtime is unavailable or no hardware is attached, DCAM Vision Studio still launches and remains usable with the simulator.
 
 ## Architecture
 
 - `DcamVision.App` - WPF desktop application and MVVM shell.
 - `DcamVision.Core` - interfaces, domain models, camera abstractions, capture settings, property metadata, validation, and simulated camera service.
-- `DcamVision.Dcam` - future Hamamatsu DCAM adapter layer.
+- `DcamVision.Dcam` - native Hamamatsu DCAM adapter layer with isolated interop, runtime detection, property mapping, capture, and streaming services.
 - `DcamVision.Imaging` - frame conversion, LUT/display processing, histogram analysis, acquisition pipeline utilities, in-memory capture history, and image/metadata export.
 - `DcamVision.Tests` - xUnit coverage for simulator and imaging behavior.
 
@@ -65,11 +68,21 @@ The simulator-backed workflow is:
 7. Change exposure
 8. Disconnect
 
+Use the Camera Source selector to choose:
+
+- Auto - discover DCAM hardware when available and always keep the simulator available.
+- Simulator - use only the built-in simulated Hamamatsu camera.
+- Hamamatsu DCAM - use only real DCAM hardware when the runtime and camera are available.
+
+The DCAM adapter expects an x64 Hamamatsu DCAM runtime. Proprietary files such as `dcamapi.dll` should come from the normal vendor installation and should not be committed to this repository.
+
 ## Test
 
 ```powershell
 dotnet test
 ```
+
+Normal tests use simulator and mock-native DCAM coverage only. Optional hardware checks are marked with the `Hardware` trait and are skipped by default; run them only on a workstation with the Hamamatsu runtime and supported camera attached.
 
 ## Roadmap
 
@@ -81,5 +94,5 @@ dotnet test
 - DONE Phase 6 - Dynamic camera property explorer
 - DONE Phase 7 - Capture history
 - DONE Phase 8 - Image and metadata export
-- TODO Phase 9 - Native Hamamatsu DCAM adapter
+- DONE Phase 9 - Native Hamamatsu DCAM adapter
 - TODO Phase 10 - Diagnostics and logging

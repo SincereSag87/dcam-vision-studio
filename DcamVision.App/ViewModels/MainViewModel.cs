@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Media;
 using DcamVision.App.Services;
 using DcamVision.Core;
+using DcamVision.Dcam.Runtime;
 using DcamVision.Imaging;
 using Microsoft.Extensions.Logging;
 
@@ -18,6 +19,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly CaptureHistoryStore _captureHistoryStore;
     private readonly CaptureRecordFactory _captureRecordFactory;
     private readonly ICaptureExportService _captureExportService;
+    private readonly ICameraBackendSelector? _backendSelector;
+    private readonly IDcamRuntime? _dcamRuntime;
     private readonly ILogger<MainViewModel> _logger;
     private readonly ExposureSliderMapper _sliderMapper;
     private CameraDevice? _selectedDevice;
@@ -75,6 +78,7 @@ public sealed class MainViewModel : ObservableObject
         CaptureHistoryStore captureHistoryStore,
         CaptureRecordFactory captureRecordFactory,
         ICaptureExportService captureExportService,
+        IDcamRuntime? dcamRuntime,
         ILogger<MainViewModel> logger)
     {
         _cameraService = cameraService;
@@ -84,6 +88,8 @@ public sealed class MainViewModel : ObservableObject
         _captureHistoryStore = captureHistoryStore;
         _captureRecordFactory = captureRecordFactory;
         _captureExportService = captureExportService;
+        _backendSelector = cameraService as ICameraBackendSelector;
+        _dcamRuntime = dcamRuntime;
         _logger = logger;
         _sliderMapper = new ExposureSliderMapper(_cameraService.ExposureRange);
         _liveMetrics = _liveAcquisitionService.Metrics;
@@ -180,6 +186,48 @@ public sealed class MainViewModel : ObservableObject
         DisplayPreset.HighContrast,
         DisplayPreset.LowContrast
     ];
+
+    public IReadOnlyList<CameraBackend> CameraBackends => _backendSelector?.AvailableBackends ??
+    [
+        CameraBackend.Simulator
+    ];
+
+    public CameraBackend SelectedCameraBackend
+    {
+        get => _backendSelector?.SelectedBackend ?? CameraBackend.Simulator;
+        set
+        {
+            if (_backendSelector is null || _backendSelector.SelectedBackend == value)
+            {
+                return;
+            }
+
+            _backendSelector.SelectedBackend = value;
+            Devices.Clear();
+            SelectedDevice = null;
+            NotifyDeviceCollectionChanged();
+            StatusMessage = $"Camera source set to {FormatCameraBackend(value)}.";
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DcamRuntimeStatusText));
+            RaiseCommandStates();
+        }
+    }
+
+    public string DcamRuntimeStatusText
+    {
+        get
+        {
+            if (_dcamRuntime is null)
+            {
+                return "DCAM Runtime: not configured";
+            }
+
+            var status = _dcamRuntime.Status;
+            return status.IsAvailable
+                ? $"DCAM Runtime: available ({status.DeviceCount} device(s))"
+                : $"DCAM Runtime: unavailable - {status.UnavailableReason}";
+        }
+    }
 
     public CameraDevice? SelectedDevice
     {
@@ -443,7 +491,9 @@ public sealed class MainViewModel : ObservableObject
 
     public string HeaderDeviceText => CameraStatusFormatter.FormatDeviceName(_cameraService.ConnectedDevice);
 
-    public string HeaderSimulatorText => SelectedDevice?.IsSimulated == true ? "SIMULATED CAMERA" : string.Empty;
+    public string HeaderSimulatorText => SelectedDevice is null
+        ? string.Empty
+        : SelectedDevice.IsSimulated ? "SIMULATED CAMERA" : "HAMAMATSU DCAM HARDWARE";
 
     public Brush StatusIndicatorBrush => Operation switch
     {
@@ -464,6 +514,8 @@ public sealed class MainViewModel : ObservableObject
     public bool IsDisconnected => !IsConnected;
 
     public bool IsSelectedDeviceSimulated => SelectedDevice?.IsSimulated == true;
+
+    public bool HasSelectedDevice => SelectedDevice is not null;
 
     public string SelectedDeviceName => SelectedDevice?.DisplayName ?? "No camera selected";
 
@@ -774,6 +826,7 @@ public sealed class MainViewModel : ObservableObject
                 Devices.Add(device);
             }
 
+            OnPropertyChanged(nameof(DcamRuntimeStatusText));
             SelectedDevice = Devices.FirstOrDefault();
             StatusMessage = Devices.Count == 0
                 ? "No cameras discovered. Run discovery to find available devices."
@@ -1302,6 +1355,17 @@ public sealed class MainViewModel : ObservableObject
         return ExposureUnitConverter.ToDisplayValue(exposure, unit).ToString("0.###", CultureInfo.InvariantCulture);
     }
 
+    private static string FormatCameraBackend(CameraBackend backend)
+    {
+        return backend switch
+        {
+            CameraBackend.Auto => "Auto",
+            CameraBackend.HamamatsuDcam => "Hamamatsu DCAM",
+            CameraBackend.Simulator => "Simulator",
+            _ => backend.ToString()
+        };
+    }
+
     private void RefreshOperationState()
     {
         OnPropertyChanged(nameof(IsBusy));
@@ -1414,6 +1478,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedSerialNumber));
         OnPropertyChanged(nameof(SelectedDeviceKind));
         OnPropertyChanged(nameof(IsSelectedDeviceSimulated));
+        OnPropertyChanged(nameof(HasSelectedDevice));
         OnPropertyChanged(nameof(HeaderSimulatorText));
     }
 

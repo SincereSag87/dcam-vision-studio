@@ -10,3 +10,8 @@ TestResults/
 *.nupkg
 *.snupkg
 *.log
+
+# Hamamatsu DCAM runtime/driver binaries are external dependencies.
+dcamapi.dll
+dcamapi*.dll
+*.dcamdriver

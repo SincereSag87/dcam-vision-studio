@@ -1,6 +1,9 @@
 using System.Windows;
 using DcamVision.App.ViewModels;
 using DcamVision.Core;
+using DcamVision.Dcam;
+using DcamVision.Dcam.Interop;
+using DcamVision.Dcam.Runtime;
 using DcamVision.App.Services;
 using DcamVision.Imaging;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,7 +21,14 @@ public partial class App : Application
 
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information));
-        services.AddSingleton<ICameraService, SimulatedCameraService>();
+        services.AddSingleton<SimulatedCameraService>();
+        services.AddSingleton<IDcamNativeApi, DcamNativeApi>();
+        services.AddSingleton<IDcamRuntime, DcamRuntime>();
+        services.AddSingleton<DcamAcquisitionOptions>();
+        services.AddSingleton<DcamCameraService>();
+        services.AddSingleton<ICameraService>(provider => new CompositeCameraService(
+            provider.GetRequiredService<SimulatedCameraService>(),
+            provider.GetRequiredService<DcamCameraService>()));
         services.AddSingleton<ImageDisplayProcessor>();
         services.AddSingleton<ImagePreviewService>();
         services.AddSingleton<CaptureHistoryStore>();

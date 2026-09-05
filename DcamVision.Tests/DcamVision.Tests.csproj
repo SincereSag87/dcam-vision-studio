@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DcamVision.Core\DcamVision.Core.csproj" />
+    <ProjectReference Include="..\DcamVision.Dcam\DcamVision.Dcam.csproj" />
     <ProjectReference Include="..\DcamVision.Imaging\DcamVision.Imaging.csproj" />
   </ItemGroup>
 

@@ -56,7 +56,7 @@
                                    FontSize="11"
                                    FontWeight="SemiBold"
                                    HorizontalAlignment="Right"
-                                   Visibility="{Binding IsSelectedDeviceSimulated, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                   Visibility="{Binding HasSelectedDevice, Converter={StaticResource BooleanToVisibilityConverter}}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>
@@ -88,6 +88,22 @@
                                     ToolTip="Scan for available cameras"
                                     TabIndex="0" />
                         </Grid>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Camera Source"
+                                           Style="{StaticResource LabelText}"
+                                           Margin="0,0,0,6" />
+                                <ComboBox ItemsSource="{Binding CameraBackends}"
+                                          SelectedItem="{Binding SelectedCameraBackend}"
+                                          ToolTip="Choose Auto, Simulator, or Hamamatsu DCAM discovery"
+                                          TabIndex="1" />
+                                <TextBlock Text="{Binding DcamRuntimeStatusText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
 
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,12">
                             <StackPanel>
@@ -155,7 +171,7 @@
                             <ListBox ItemsSource="{Binding Devices}"
                                      SelectedItem="{Binding SelectedDevice}"
                                      DisplayMemberPath="DisplayName"
-                                     TabIndex="1" />
+                                     TabIndex="2" />
                             <StackPanel VerticalAlignment="Center"
                                         Margin="16"
                                         Visibility="{Binding NoDevices, Converter={StaticResource BooleanToVisibilityConverter}}">
