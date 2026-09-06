@@ -914,6 +914,118 @@
 
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <StackPanel>
+                                <TextBlock Text="Diagnostics"
+                                           Style="{StaticResource SectionHeadingText}"
+                                           Margin="0,0,0,10" />
+                                <TextBlock Text="{Binding Diagnostics.HealthSummaryText}"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,8" />
+                                <TextBlock Text="{Binding Diagnostics.ApplicationText}"
+                                           Style="{StaticResource ValueText}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Diagnostics.RuntimeText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0" />
+                                <TextBlock Text="{Binding Diagnostics.UptimeText, StringFormat=Uptime: {0}}"
+                                           Style="{StaticResource MutedText}"
+                                           Margin="0,4,0,8" />
+                                <TextBlock Text="{Binding Diagnostics.CameraText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding Diagnostics.AcquisitionText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding Diagnostics.ImagingText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding Diagnostics.HistoryText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding Diagnostics.ExportText}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,0,0,4" />
+                                <TextBlock Text="{Binding Diagnostics.RecentErrorsText}"
+                                           Style="{StaticResource MutedText}"
+                                           Margin="0,0,0,10" />
+
+                                <TextBlock Text="Logs"
+                                           Style="{StaticResource LabelText}"
+                                           Margin="0,0,0,6" />
+                                <Grid Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="92" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox ItemsSource="{Binding Diagnostics.LogLevels}"
+                                              SelectedItem="{Binding Diagnostics.MinimumLogLevel}"
+                                              ToolTip="Minimum log level for the in-memory log view" />
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding Diagnostics.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Search recent log messages and properties"
+                                             Margin="8,0,0,0" />
+                                </Grid>
+                                <TextBox Text="{Binding Diagnostics.CategoryFilter, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Filter by logger category"
+                                         Margin="0,0,0,8" />
+                                <CheckBox Content="Pause log view"
+                                          IsChecked="{Binding Diagnostics.IsPaused}"
+                                          Margin="0,0,0,8" />
+                                <ListBox ItemsSource="{Binding Diagnostics.LogEntries}"
+                                         MaxHeight="160"
+                                         Background="#0D141C"
+                                         BorderBrush="{StaticResource BorderBrush}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="4">
+                                                <TextBlock Text="{Binding Message}"
+                                                           Style="{StaticResource ValueText}"
+                                                           TextWrapping="Wrap" />
+                                                <TextBlock Style="{StaticResource MutedText}">
+                                                    <Run Text="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}" />
+                                                    <Run Text=" " />
+                                                    <Run Text="{Binding Level}" />
+                                                    <Run Text=" " />
+                                                    <Run Text="{Binding Category}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Text="{Binding Diagnostics.LogDirectoryText, StringFormat=Logs: {0}}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,8" />
+                                <UniformGrid Columns="2">
+                                    <Button Content="Copy Diagnostics"
+                                            Command="{Binding Diagnostics.CopyDiagnosticsCommand}"
+                                            Margin="0,0,6,6" />
+                                    <Button Content="Open Logs"
+                                            Command="{Binding Diagnostics.OpenLogFolderCommand}"
+                                            Margin="6,0,0,6" />
+                                    <Button Content="Clear View"
+                                            Command="{Binding Diagnostics.ClearLogViewCommand}"
+                                            Margin="0,0,6,0" />
+                                    <Button Content="Support Bundle"
+                                            Command="{Binding Diagnostics.CreateSupportBundleCommand}"
+                                            Style="{StaticResource PrimaryButton}"
+                                            Margin="6,0,0,0" />
+                                </UniformGrid>
+                                <TextBlock Text="{Binding Diagnostics.SupportBundleStatus}"
+                                           Style="{StaticResource MutedText}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,8,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
+                            <StackPanel>
                                 <TextBlock Text="Camera Property Explorer"
                                            Style="{StaticResource SectionHeadingText}"
                                            Margin="0,0,0,10" />

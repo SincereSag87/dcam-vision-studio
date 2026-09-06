@@ -39,6 +39,12 @@ public sealed class CaptureHistoryViewModel : ObservableObject
     private string _exportStatus = "No export running.";
     private double _exportProgressValue;
     private CancellationTokenSource? _exportCancellation;
+    private Guid? _lastExportId;
+    private string? _lastExportDestination;
+    private string _lastExportResult = "No export run.";
+    private int _lastExportCaptureCount;
+    private int _lastExportFailureCount;
+    private TimeSpan? _lastExportDuration;
 
     public CaptureHistoryViewModel(
         CaptureHistoryStore store,
@@ -364,6 +370,18 @@ public sealed class CaptureHistoryViewModel : ObservableObject
     }
 
     public bool HasAnyExportFormat => ExportTiff16 || ExportPngPreview || ExportRawMono16 || ExportJsonMetadata;
+
+    public Guid? LastExportId => _lastExportId;
+
+    public string? LastExportDestination => _lastExportDestination;
+
+    public string LastExportResult => _lastExportResult;
+
+    public int LastExportCaptureCount => _lastExportCaptureCount;
+
+    public int LastExportFailureCount => _lastExportFailureCount;
+
+    public TimeSpan? LastExportDuration => _lastExportDuration;
 
     public string EstimatedExportSizeText
     {
@@ -692,12 +710,23 @@ public sealed class CaptureHistoryViewModel : ObservableObject
 
         try
         {
+            var startedAt = DateTimeOffset.UtcNow;
             var result = await _exportService.ExportAsync(CreateRequest(captures), progress, _exportCancellation.Token);
+            _lastExportId = result.ExportId;
+            _lastExportDestination = result.OutputDirectory;
+            _lastExportResult = result.Summary;
+            _lastExportCaptureCount = result.RequestedCaptureCount;
+            _lastExportFailureCount = result.Items.Count(item => !item.Success && !item.Skipped);
+            _lastExportDuration = DateTimeOffset.UtcNow - startedAt;
+            RefreshLastExportDiagnostics();
             ExportProgressValue = result.WasCanceled ? ExportProgressValue : 100;
             ExportStatus = result.Summary;
         }
         catch (Exception exception)
         {
+            _lastExportResult = $"Export failed: {exception.Message}";
+            _lastExportFailureCount = captures.Count;
+            RefreshLastExportDiagnostics();
             ExportStatus = $"Export failed: {exception.Message}";
         }
         finally
@@ -744,5 +773,15 @@ public sealed class CaptureHistoryViewModel : ObservableObject
         ExportFilteredCommand.RaiseCanExecuteChanged();
         ExportSessionCommand.RaiseCanExecuteChanged();
         CancelExportCommand.RaiseCanExecuteChanged();
+    }
+
+    private void RefreshLastExportDiagnostics()
+    {
+        OnPropertyChanged(nameof(LastExportId));
+        OnPropertyChanged(nameof(LastExportDestination));
+        OnPropertyChanged(nameof(LastExportResult));
+        OnPropertyChanged(nameof(LastExportCaptureCount));
+        OnPropertyChanged(nameof(LastExportFailureCount));
+        OnPropertyChanged(nameof(LastExportDuration));
     }
 }

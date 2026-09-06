@@ -6,6 +6,7 @@ using DcamVision.Dcam.Interop;
 using DcamVision.Dcam.Runtime;
 using DcamVision.App.Services;
 using DcamVision.Imaging;
+using DcamVision.Imaging.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -20,7 +21,22 @@ public partial class App : Application
         base.OnStartup(e);
 
         var services = new ServiceCollection();
-        services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Information));
+        var loggingOptions = new DiagnosticsLoggingOptions();
+        var logStore = new InMemoryDiagnosticLogStore(loggingOptions.InMemoryCapacity, loggingOptions.RecentErrorCapacity);
+        var diagnosticsLoggerProvider = new DiagnosticsLoggerProvider(logStore, loggingOptions);
+        services.AddSingleton(loggingOptions);
+        services.AddSingleton(logStore);
+        services.AddSingleton(diagnosticsLoggerProvider);
+        services.AddLogging(builder =>
+        {
+            builder.SetMinimumLevel(loggingOptions.MinimumLevel);
+            builder.AddProvider(diagnosticsLoggerProvider);
+        });
+        services.AddSingleton<IApplicationDiagnosticsService, ApplicationDiagnosticsService>();
+        services.AddSingleton(provider => new SupportBundleService(
+            provider.GetRequiredService<IApplicationDiagnosticsService>(),
+            provider.GetRequiredService<InMemoryDiagnosticLogStore>(),
+            provider.GetRequiredService<DiagnosticsLoggerProvider>().LogDirectory));
         services.AddSingleton<SimulatedCameraService>();
         services.AddSingleton<IDcamNativeApi, DcamNativeApi>();
         services.AddSingleton<IDcamRuntime, DcamRuntime>();
@@ -46,11 +62,36 @@ public partial class App : Application
         services.AddSingleton<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider();
+        var logger = _serviceProvider.GetRequiredService<ILogger<App>>();
+        logger.LogInformation(
+            "Application startup. Version={Version} Runtime={Runtime} OS={OS} Architecture={Architecture}",
+            typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
+            System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+            System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture);
+        DispatcherUnhandledException += (_, args) =>
+        {
+            logger.LogError(args.Exception, "Unhandled dispatcher exception.");
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception exception)
+            {
+                logger.LogCritical(exception, "Unhandled application domain exception.");
+            }
+        };
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            logger.LogError(args.Exception, "Unobserved task exception.");
+            args.SetObserved();
+        };
         _serviceProvider.GetRequiredService<MainWindow>().Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _serviceProvider?.GetService<ILogger<App>>()?.LogInformation("Application shutdown requested.");
+        _serviceProvider?.GetService<DiagnosticsLoggerProvider>()?.Dispose();
         _serviceProvider?.Dispose();
         base.OnExit(e);
     }

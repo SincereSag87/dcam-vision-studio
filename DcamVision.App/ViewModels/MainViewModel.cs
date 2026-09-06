@@ -6,6 +6,7 @@ using DcamVision.App.Services;
 using DcamVision.Core;
 using DcamVision.Dcam.Runtime;
 using DcamVision.Imaging;
+using DcamVision.Imaging.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DcamVision.App.ViewModels;
@@ -21,6 +22,10 @@ public sealed class MainViewModel : ObservableObject
     private readonly ICaptureExportService _captureExportService;
     private readonly ICameraBackendSelector? _backendSelector;
     private readonly IDcamRuntime? _dcamRuntime;
+    private readonly IApplicationDiagnosticsService _diagnosticsService;
+    private readonly SupportBundleService _supportBundleService;
+    private readonly InMemoryDiagnosticLogStore _logStore;
+    private readonly DiagnosticsLoggerProvider _loggerProvider;
     private readonly ILogger<MainViewModel> _logger;
     private readonly ExposureSliderMapper _sliderMapper;
     private CameraDevice? _selectedDevice;
@@ -79,6 +84,10 @@ public sealed class MainViewModel : ObservableObject
         CaptureRecordFactory captureRecordFactory,
         ICaptureExportService captureExportService,
         IDcamRuntime? dcamRuntime,
+        IApplicationDiagnosticsService diagnosticsService,
+        SupportBundleService supportBundleService,
+        InMemoryDiagnosticLogStore logStore,
+        DiagnosticsLoggerProvider loggerProvider,
         ILogger<MainViewModel> logger)
     {
         _cameraService = cameraService;
@@ -90,6 +99,10 @@ public sealed class MainViewModel : ObservableObject
         _captureExportService = captureExportService;
         _backendSelector = cameraService as ICameraBackendSelector;
         _dcamRuntime = dcamRuntime;
+        _diagnosticsService = diagnosticsService;
+        _supportBundleService = supportBundleService;
+        _logStore = logStore;
+        _loggerProvider = loggerProvider;
         _logger = logger;
         _sliderMapper = new ExposureSliderMapper(_cameraService.ExposureRange);
         _liveMetrics = _liveAcquisitionService.Metrics;
@@ -105,6 +118,12 @@ public sealed class MainViewModel : ObservableObject
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning) == MessageBoxResult.Yes);
         CaptureHistory.SelectedCaptureChanged += OnHistoryCaptureSelected;
+        Diagnostics = new DiagnosticsViewModel(
+            _diagnosticsService,
+            _supportBundleService,
+            _logStore,
+            _loggerProvider.LogDirectory,
+            CreateDiagnosticsState);
         _pendingExposure = _cameraService.CurrentSettings.Exposure;
         _exposureValue = FormatExposureValue(_pendingExposure, _selectedExposureUnit);
         _exposureSliderValue = _sliderMapper.ToSliderValue(_pendingExposure);
@@ -151,6 +170,8 @@ public sealed class MainViewModel : ObservableObject
     public CameraPropertyExplorerViewModel PropertyExplorer { get; }
 
     public CaptureHistoryViewModel CaptureHistory { get; }
+
+    public DiagnosticsViewModel Diagnostics { get; }
 
     public IReadOnlyList<ExposureUnit> ExposureUnits { get; } =
     [
@@ -831,6 +852,7 @@ public sealed class MainViewModel : ObservableObject
             StatusMessage = Devices.Count == 0
                 ? "No cameras discovered. Run discovery to find available devices."
                 : $"Discovered {Devices.Count} camera(s).";
+            _logger.LogInformation("Camera discovery completed. Backend={Backend} DeviceCount={DeviceCount}", SelectedCameraBackend, Devices.Count);
             NotifyDeviceCollectionChanged();
         });
     }
@@ -850,6 +872,7 @@ public sealed class MainViewModel : ObservableObject
                 PropertySummaries.Clear();
                 await PropertyExplorer.RefreshAsync();
                 StatusMessage = "Camera disconnected.";
+                _logger.LogInformation("Camera disconnected.");
             }
             else
             {
@@ -865,6 +888,10 @@ public sealed class MainViewModel : ObservableObject
                 await RefreshPropertiesAsync();
                 await PropertyExplorer.RefreshAsync();
                 StatusMessage = $"Connected to {SelectedDevice.DisplayName}.";
+                _logger.LogInformation(
+                    "Camera connected. CameraId={CameraId} Backend={Backend}",
+                    _cameraService.ConnectedDevice?.Id,
+                    SelectedCameraBackend);
             }
         });
     }
@@ -1363,6 +1390,49 @@ public sealed class MainViewModel : ObservableObject
             CameraBackend.HamamatsuDcam => "Hamamatsu DCAM",
             CameraBackend.Simulator => "Simulator",
             _ => backend.ToString()
+        };
+    }
+
+    private DiagnosticsState CreateDiagnosticsState()
+    {
+        var connected = _cameraService.ConnectedDevice;
+        var dcamStatus = _dcamRuntime?.Status;
+        return new DiagnosticsState
+        {
+            SelectedBackend = SelectedCameraBackend,
+            ActiveBackend = connected is null ? null : connected.IsSimulated ? CameraBackend.Simulator : CameraBackend.HamamatsuDcam,
+            SimulatorAvailable = true,
+            DcamRuntimeAvailable = dcamStatus?.IsAvailable == true,
+            DcamUnavailableReason = dcamStatus?.UnavailableReason,
+            DcamApiVersion = dcamStatus?.ApiVersion,
+            DcamDeviceCount = dcamStatus?.DeviceCount ?? 0,
+            DcamInitialized = _dcamRuntime?.IsInitialized == true,
+            ConnectedCamera = connected?.DisplayName,
+            CameraId = connected?.SerialNumber,
+            CameraState = _cameraService.State,
+            AcquisitionMetrics = _liveMetrics,
+            LiveState = _liveAcquisitionService.State,
+            LiveSessionId = _liveAcquisitionService.Session?.SessionId,
+            CurrentFrameNumber = _lastFrame?.FrameNumber,
+            Resolution = _lastFrame is null ? null : $"{_lastFrame.Width} x {_lastFrame.Height}",
+            ProcessingTime = _displayFrame?.ProcessingTime,
+            HistogramBins = _histogramResult?.Bins.Length ?? 0,
+            AutoContrastMode = SelectedAutoContrastMode,
+            BlackPoint = EffectiveBlackPoint,
+            WhitePoint = EffectiveWhitePoint,
+            Gamma = GammaValue,
+            CaptureCount = _captureHistoryStore.Captures.Count,
+            CaptureCapacity = _captureHistoryStore.MaximumCaptures,
+            SessionCount = _captureHistoryStore.Sessions.Count,
+            EstimatedHistoryMemoryBytes = _captureHistoryStore.EstimatedMemoryBytes,
+            ActiveCaptureSessionName = _captureHistoryStore.ActiveSession?.Name,
+            IsExporting = CaptureHistory.IsExporting,
+            LastExportId = CaptureHistory.LastExportId,
+            LastExportDestination = CaptureHistory.LastExportDestination,
+            LastExportResult = CaptureHistory.LastExportResult,
+            LastExportCaptureCount = CaptureHistory.LastExportCaptureCount,
+            LastExportFailureCount = CaptureHistory.LastExportFailureCount,
+            LastExportDuration = CaptureHistory.LastExportDuration
         };
     }
 

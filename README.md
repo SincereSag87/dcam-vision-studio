@@ -15,6 +15,11 @@ The original project used Hamamatsu DCAM SDK sample code as a starting point. Th
 - Phase 7 - Complete
 - Phase 8 - Complete
 - Phase 9 - Complete
+- Phase 10 - Complete
+
+## Project Status
+
+The planned ten-phase modernization roadmap is complete. DCAM Vision Studio has evolved from a 2024 vendor SDK/sample-based capstone camera-control project into a modern .NET 10 scientific imaging application with hardware abstraction, simulator-backed development, native DCAM adapter architecture, async acquisition, scientific image analysis, in-memory capture history, explicit export, diagnostics, and automated tests.
 
 Phase 1 implemented the camera abstraction, a deterministic simulated camera, basic imaging helpers, unit tests, and a minimal WPF shell wired to the simulator. The simulator allows development and testing without physical camera hardware.
 
@@ -36,6 +41,8 @@ Phase 9 adds the native Hamamatsu DCAM adapter behind the existing `ICameraServi
 
 Hamamatsu DCAM runtime and driver binaries are external dependencies and are not distributed with this repository. Install the supported Hamamatsu DCAM-API runtime and camera driver separately, use an x64 process/runtime combination, then select Auto or Hamamatsu DCAM in the application. If the runtime is unavailable or no hardware is attached, DCAM Vision Studio still launches and remains usable with the simulator.
 
+Phase 10 adds professional diagnostics and structured logging. The application writes structured rolling log files to `%LOCALAPPDATA%\DCAMVisionStudio\Logs\`, keeps a bounded in-memory log/error view for the diagnostics workspace, exposes application/runtime/camera/DCAM/acquisition/imaging/history/export diagnostics, applies simple health rules, handles unhandled exceptions through the logging system, and can generate privacy-conscious support bundles with diagnostics JSON, text reports, recent errors, recent logs, and a manifest. Native DCAM integration is implemented and covered by mocked/native-boundary tests. Physical hardware validation remains environment-dependent.
+
 ## Architecture
 
 - `DcamVision.App` - WPF desktop application and MVVM shell.
@@ -43,6 +50,32 @@ Hamamatsu DCAM runtime and driver binaries are external dependencies and are not
 - `DcamVision.Dcam` - native Hamamatsu DCAM adapter layer with isolated interop, runtime detection, property mapping, capture, and streaming services.
 - `DcamVision.Imaging` - frame conversion, LUT/display processing, histogram analysis, acquisition pipeline utilities, in-memory capture history, and image/metadata export.
 - `DcamVision.Tests` - xUnit coverage for simulator and imaging behavior.
+
+## Final Architecture
+
+```text
+WPF / MVVM
+      |
+      v
+Camera Abstraction
+  |          |
+Simulator   DCAM
+      |
+      v
+Acquisition Pipeline
+      |
+      v
+Imaging / Analysis
+      |
+      v
+History
+      |
+      v
+Export
+
+Cross-cutting:
+Logging / Diagnostics
+```
 
 ## Build
 
@@ -76,6 +109,24 @@ Use the Camera Source selector to choose:
 
 The DCAM adapter expects an x64 Hamamatsu DCAM runtime. Proprietary files such as `dcamapi.dll` should come from the normal vendor installation and should not be committed to this repository.
 
+## Diagnostics
+
+Runtime logs are written outside the repository:
+
+```text
+%LOCALAPPDATA%\DCAMVisionStudio\Logs\
+```
+
+Logs roll daily using names such as `dcam-vision-studio-2026-09-05.log` and are retained for a bounded period. The Diagnostics workspace shows health status, runtime/backend diagnostics, live acquisition metrics, current image-processing state, capture-history/export summaries, recent warnings/errors, and a bounded in-memory log viewer with level/category/search filtering.
+
+Support bundles are generated under:
+
+```text
+%LOCALAPPDATA%\DCAMVisionStudio\SupportBundles\
+```
+
+Bundles include diagnostics JSON, a text report, recent errors, selected recent log files, a manifest, and a README. Image captures, exported scientific data, usernames, full personal paths, and camera serial numbers are not included by default. Camera serial inclusion is controlled by support-bundle options.
+
 ## Test
 
 ```powershell
@@ -95,4 +146,4 @@ Normal tests use simulator and mock-native DCAM coverage only. Optional hardware
 - DONE Phase 7 - Capture history
 - DONE Phase 8 - Image and metadata export
 - DONE Phase 9 - Native Hamamatsu DCAM adapter
-- TODO Phase 10 - Diagnostics and logging
+- DONE Phase 10 - Diagnostics and logging
